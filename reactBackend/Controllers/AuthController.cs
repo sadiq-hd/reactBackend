@@ -10,6 +10,7 @@ using reactBackend.Dtos;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json;
+using reactBackend.Services;
 
 
 namespace reactBackend.Controllers
@@ -22,17 +23,23 @@ namespace reactBackend.Controllers
         private readonly SignInManager<ApplicationUser> _signInManager;
         private readonly RoleManager<IdentityRole> _roleManager;
         private readonly IConfiguration _configuration;
+        private readonly IEmailService _emailService;
+
 
         public AuthController(
             UserManager<ApplicationUser> userManager,
             SignInManager<ApplicationUser> signInManager,
             RoleManager<IdentityRole> roleManager,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IEmailService emailService)
+
         {
             _userManager = userManager;
             _signInManager = signInManager;
             _roleManager = roleManager;
             _configuration = configuration;
+            _emailService = emailService;
+
         }
 
         private async Task<string> CreateToken(ApplicationUser user)
@@ -124,6 +131,126 @@ namespace reactBackend.Controllers
 
             return Ok(new { message = "تم إنشاء الحساب بنجاح" });
         }
+
+        [HttpPost("forgot-password")]
+public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto model)
+{
+    if (!ModelState.IsValid)
+        return BadRequest(ModelState);
+
+    var user = await _userManager.FindByEmailAsync(model.Email);
+    if (user == null)
+        // إرجاع رسالة نجاح حتى لو كان المستخدم غير موجود (لأسباب أمنية)
+        return Ok(new { message = "تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني" });
+
+    // إنشاء رمز إعادة تعيين كلمة المرور
+    var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+
+    // إنشاء رابط إعادة تعيين كلمة المرور
+    var clientUrl = _configuration["ClientURL"] ?? "https://recat-onlinestore.netlify.app";
+    var resetUrl = $"{clientUrl}/reset-password?email={Uri.EscapeDataString(model.Email)}&token={Uri.EscapeDataString(token)}";
+
+    // إنشاء محتوى البريد الإلكتروني
+    var emailContent = $@"
+        <div style='direction: rtl; text-align: right; font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 5px;'>
+            <h2 style='color: #333;'>إعادة تعيين كلمة المرور</h2>
+            <p>مرحباً {user.Name}،</p>
+            <p>لقد تلقينا طلباً لإعادة تعيين كلمة المرور الخاصة بحسابك. إذا كنت قد طلبت إعادة تعيين كلمة المرور، فيرجى النقر على الرابط أدناه:</p>
+            <p style='margin: 20px 0;'>
+                <a href='{resetUrl}' style='display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 4px;'>إعادة تعيين كلمة المرور</a>
+            </p>
+            <p>أو يمكنك نسخ الرابط التالي ولصقه في متصفحك:</p>
+            <p style='background-color: #f5f5f5; padding: 10px; border-radius: 3px; word-break: break-all;'>{resetUrl}</p>
+            <p>إذا لم تطلب إعادة تعيين كلمة المرور، يمكنك تجاهل هذا البريد الإلكتروني.</p>
+            <p>مع تحيات،<br>فريق المتجر الإلكتروني</p>
+        </div>
+    ";
+
+    try
+    {
+        // إرسال البريد الإلكتروني باستخدام خدمة SendGrid
+        var emailSent = await _emailService.SendEmailAsync(
+            user.Email,
+            "إعادة تعيين كلمة المرور - المتجر الإلكتروني",
+            emailContent
+        );
+
+        if (!emailSent)
+        {
+            return StatusCode(500, new { message = "فشل في إرسال البريد الإلكتروني، يرجى المحاولة مرة أخرى لاحقاً" });
+        }
+
+        // في بيئة التطوير، يمكن إرجاع معلومات إضافية للتسهيل
+        var isDevelopment = _configuration["ASPNETCORE_ENVIRONMENT"] == "Development";
+        if (isDevelopment)
+        {
+            return Ok(new
+            {
+                message = "تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني",
+                resetUrl = resetUrl,
+                token = token
+            });
+        }
+
+        return Ok(new { message = "تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني" });
+    }
+    catch (Exception ex)
+    {
+        // سجل الخطأ
+        Console.WriteLine($"Error sending email: {ex.Message}");
+        return StatusCode(500, new { message = "حدث خطأ أثناء معالجة طلبك" });
+    }
+}
+
+[HttpPost("reset-password")]
+public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto model)
+{
+    if (!ModelState.IsValid)
+        return BadRequest(ModelState);
+
+    var user = await _userManager.FindByEmailAsync(model.Email);
+    if (user == null)
+        return BadRequest(new { message = "فشلت عملية إعادة تعيين كلمة المرور" });
+
+    // فك تشفير الرمز إذا كان مشفرًا
+    var decodedToken = Uri.UnescapeDataString(model.Token);
+
+    // تنفيذ إعادة تعيين كلمة المرور
+    var result = await _userManager.ResetPasswordAsync(user, decodedToken, model.NewPassword);
+
+    if (!result.Succeeded)
+    {
+        var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+        return BadRequest(new { message = "فشلت عملية إعادة تعيين كلمة المرور", errors });
+    }
+
+    // تحديث الطابع الأمني
+    await _userManager.UpdateSecurityStampAsync(user);
+
+    return Ok(new { message = "تم إعادة تعيين كلمة المرور بنجاح" });
+}
+
+[HttpGet("validate-reset-token")]
+public async Task<IActionResult> ValidateResetToken([FromQuery] string email, [FromQuery] string token)
+{
+    if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(token))
+        return BadRequest(new { isValid = false, message = "البريد الإلكتروني والرمز مطلوبان" });
+
+    var user = await _userManager.FindByEmailAsync(email);
+    if (user == null)
+        return Ok(new { isValid = false });
+
+    // التحقق من صحة الرمز
+    var purpose = "ResetPassword";
+    var isTokenValid = await _userManager.VerifyUserTokenAsync(
+        user,
+        _userManager.Options.Tokens.PasswordResetTokenProvider,
+        purpose,
+        token
+    );
+
+    return Ok(new { isValid = isTokenValid });
+}
 
         [HttpGet]
         [Authorize(Roles = "admin")]
