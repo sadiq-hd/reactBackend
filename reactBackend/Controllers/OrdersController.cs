@@ -1505,7 +1505,7 @@ namespace reactBackend.Controllers
         }
 
         [HttpPut("admin/{id}/status")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "admin")]
         public async Task<ActionResult<OrderResponseDto>> UpdateOrderStatus(int id, [FromBody] UpdateOrderStatusDto request)
         {
             var strategy = _context.Database.CreateExecutionStrategy();

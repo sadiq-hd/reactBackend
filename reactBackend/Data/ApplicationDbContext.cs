@@ -15,19 +15,19 @@ namespace reactBackend.Data
         {
         }
 
-        public DbSet<Product> Products { get; set; }
-        public DbSet<ProductImage> ProductImages { get; set; }
-        public DbSet<WishlistItem> WishlistItems { get; set; }
-        public DbSet<CartItem> CartItems { get; set; }
-        public DbSet<Order> Orders { get; set; }
-        public DbSet<OrderItem> OrderItems { get; set; }
-        public DbSet<PaymentDetails> PaymentDetails { get; set; }
-        public DbSet<DeliveryAddress> DeliveryAddresses { get; set; }
+        public DbSet<Product> Products { get; set; } = null!;
+        public DbSet<ProductImage> ProductImages { get; set; } = null!;
+        public DbSet<WishlistItem> WishlistItems { get; set; } = null!;
+        public DbSet<CartItem> CartItems { get; set; } = null!;
+        public DbSet<Order> Orders { get; set; } = null!;
+        public DbSet<OrderItem> OrderItems { get; set; } = null!;
+        public DbSet<PaymentDetails> PaymentDetails { get; set; } = null!;
+        public DbSet<DeliveryAddress> DeliveryAddresses { get; set; } = null!;
         public DbSet<UserAddress> UserAddresses { get; set; } = null!;
-        public DbSet<Discount> Discounts { get; set; }
-        public DbSet<DiscountProduct> DiscountProducts { get; set; }
-        public DbSet<PromoCode> PromoCodes { get; set; }
-        public DbSet<PromoCodeUsage> PromoCodeUsages { get; set; }
+        public DbSet<Discount> Discounts { get; set; } = null!;
+        public DbSet<DiscountProduct> DiscountProducts { get; set; } = null!;
+        public DbSet<PromoCode> PromoCodes { get; set; } = null!;
+        public DbSet<PromoCodeUsage> PromoCodeUsages { get; set; } = null!;
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -83,8 +83,8 @@ namespace reactBackend.Data
                 entity.Property(p => p.PaymentData)
                     .HasColumnType("nvarchar(max)")
                     .HasConversion(
-                        v => JsonSerializer.Serialize(v, new JsonSerializerOptions { WriteIndented = true }),
-                        v => JsonSerializer.Deserialize<Dictionary<string, string>>(v, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }))
+                        v => v != null ? JsonSerializer.Serialize(v, new JsonSerializerOptions { WriteIndented = true }) : null,
+                        v => v != null ? JsonSerializer.Deserialize<Dictionary<string, string>>(v, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) : new Dictionary<string, string>())
                     .Metadata.SetValueComparer(new DictionaryComparer<string, string>());
 
                 entity.Property(p => p.Amount)
@@ -271,12 +271,12 @@ namespace reactBackend.Data
         }
     }
 
-    public class DictionaryComparer<TKey, TValue> : ValueComparer<Dictionary<TKey, TValue>>
+    public class DictionaryComparer<TKey, TValue> : ValueComparer<Dictionary<TKey, TValue>> where TKey : notnull
     {
         public DictionaryComparer() : base(
-            (d1, d2) => d1.SequenceEqual(d2),
-            d => d.Aggregate(0, (a, v) => HashCode.Combine(a, v.GetHashCode())),
-            d => new Dictionary<TKey, TValue>(d))
+            (d1, d2) => d1 != null && d2 != null && d1.SequenceEqual(d2),
+            d => d != null ? d.Aggregate(0, (a, v) => HashCode.Combine(a, v.GetHashCode())) : 0,
+            d => d != null ? new Dictionary<TKey, TValue>(d) : new Dictionary<TKey, TValue>())
         {
         }
     }
