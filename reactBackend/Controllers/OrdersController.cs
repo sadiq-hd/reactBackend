@@ -1645,7 +1645,7 @@ namespace reactBackend.Controllers
         }
 
         [HttpPut("admin/{id}/payment-status")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "admin")]
         public async Task<ActionResult<OrderResponseDto>> UpdatePaymentStatus(int id, [FromBody] UpdatePaymentStatusDto request)
         {
             try
