@@ -18,6 +18,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddSingleton<IOtpService, OtpService>();
+
+
 
 // تسجيل خدمة الصور
 builder.Services.AddScoped<IImageService, ImageService>();
@@ -45,14 +48,19 @@ var connectionString = builder.Environment.IsDevelopment()
    : builder.Configuration.GetConnectionString("AzureConnection");
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-   options.UseSqlServer(connectionString,
-       sqlOptions =>
-       {
-           sqlOptions.EnableRetryOnFailure(
-               maxRetryCount: 5,
-               maxRetryDelay: TimeSpan.FromSeconds(30),
-               errorNumbersToAdd: null);
-       }));
+{
+    options.UseSqlServer(connectionString, sqlOptions =>
+    {
+        sqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(30),
+            errorNumbersToAdd: null);
+    });
+});
+
+// إضافة تسجيل لأخطاء الاتصال بقاعدة البيانات
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
 
 // Add Identity Services
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
@@ -79,14 +87,14 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 // Configure CORS
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowReactApp",
+    options.AddPolicy("AllowReactApp", 
         builder =>
         {
             builder
                 .WithOrigins(
                     "https://recat-onlinestore.netlify.app",
                     "http://localhost:5173"
-                )
+                                    )
                 .AllowAnyHeader()
                 .AllowAnyMethod()
                 .AllowCredentials();

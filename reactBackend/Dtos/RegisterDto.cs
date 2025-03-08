@@ -5,7 +5,7 @@ namespace reactBackend.Dtos
     public class RegisterDto
     {
         [Required(ErrorMessage = "اسم المستخدم مطلوب")]
-        [StringLength(50, MinimumLength = 3, ErrorMessage = "يجب أن يكون اسم المستخدم بين 3 و 50 حرف")]
+        [StringLength(20, MinimumLength = 3, ErrorMessage = "يجب أن يكون اسم المستخدم بين 3 و 50 حرف")]
         public string Username { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "البريد الإلكتروني مطلوب")]

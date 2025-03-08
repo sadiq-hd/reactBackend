@@ -10,7 +10,8 @@ using reactBackend.Dtos;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json;
-
+using reactBackend.Services;
+using System.Security.Cryptography;
 
 namespace reactBackend.Controllers
 {
@@ -22,17 +23,20 @@ namespace reactBackend.Controllers
         private readonly SignInManager<ApplicationUser> _signInManager;
         private readonly RoleManager<IdentityRole> _roleManager;
         private readonly IConfiguration _configuration;
+        private readonly IOtpService _otpService;
 
         public AuthController(
             UserManager<ApplicationUser> userManager,
             SignInManager<ApplicationUser> signInManager,
             RoleManager<IdentityRole> roleManager,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IOtpService otpService)
         {
             _userManager = userManager;
             _signInManager = signInManager;
             _roleManager = roleManager;
             _configuration = configuration;
+            _otpService = otpService;
         }
 
         private async Task<string> CreateToken(ApplicationUser user)
@@ -42,8 +46,8 @@ namespace reactBackend.Controllers
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id),
-                new Claim(ClaimTypes.Email, user.Email),
-                new Claim(ClaimTypes.Name, user.UserName)
+                new Claim(ClaimTypes.Email, user.Email ?? string.Empty),
+                new Claim(ClaimTypes.Name, user.UserName ?? string.Empty)
             };
 
             // إضافة الأدوار للـ claims
@@ -75,12 +79,71 @@ namespace reactBackend.Controllers
                       await _userManager.Users.FirstOrDefaultAsync(u => u.PhoneNumber == loginDto.EmailOrPhone);
 
             if (user == null)
-                return BadRequest("البريد الإلكتروني أو كلمة المرور غير صحيحة");
+                return BadRequest("البريد الإلكتروني أو رقم الهاتف أو كلمة المرور غير صحيحة");
 
             var result = await _signInManager.CheckPasswordSignInAsync(user, loginDto.Password, false);
 
             if (!result.Succeeded)
-                return BadRequest("البريد الإلكتروني أو كلمة المرور غير صحيحة");
+                return BadRequest("البريد الإلكتروني أو رقم الهاتف أو كلمة المرور غير صحيحة");
+
+            // إرسال رمز OTP للتحقق ثنائي العامل
+            var otp = _otpService.GenerateOtp();
+            if (!string.IsNullOrEmpty(user.PhoneNumber))
+            {
+                _otpService.StoreOtp(user.PhoneNumber, otp);
+            }
+            else
+            {
+                return BadRequest("رقم الهاتف غير متوفر للمستخدم");
+            }
+
+            // في بيئة الإنتاج سيتم إرسال الرمز عبر SMS
+            // هنا نقوم بإرجاع الرمز للاختبار فقط
+            var isDevelopment = _configuration["ASPNETCORE_ENVIRONMENT"] == "Development";
+
+            if (isDevelopment)
+            {
+                return Ok(new
+                {
+                    requireOtp = true,
+                    phoneNumber = user.PhoneNumber,
+                    message = "تم إرسال رمز التحقق إلى هاتفك المحمول",
+                    testOtp = otp  // في بيئة الإنتاج يجب إزالة هذا
+                });
+            }
+            else
+            {
+                return Ok(new
+                {
+                    requireOtp = true,
+                    phoneNumber = user.PhoneNumber,
+                    message = "تم إرسال رمز التحقق إلى هاتفك المحمول"
+                });
+            }
+        }
+
+        [HttpPost("verify-otp")]
+        public async Task<IActionResult> VerifyOtp([FromBody] VerifyOtpDto model)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.PhoneNumber == model.PhoneNumber);
+            
+            if (user == null)
+                return BadRequest("المستخدم غير موجود");
+
+            // التحقق من صحة رمز OTP
+            bool isValidOtp = _otpService.VerifyOtp(model.PhoneNumber, model.Otp);
+            
+            if (!isValidOtp)
+                return BadRequest("رمز التحقق غير صحيح أو منتهي الصلاحية");
+
+            // حذف رمز OTP بعد التحقق الناجح
+            if (!string.IsNullOrEmpty(model.PhoneNumber))
+            {
+                _otpService.RemoveOtp(model.PhoneNumber);
+            }
 
             var userRoles = await _userManager.GetRolesAsync(user);
             var token = await CreateToken(user);
@@ -106,6 +169,9 @@ namespace reactBackend.Controllers
             if (await _userManager.FindByEmailAsync(registerDto.Email) != null)
                 return BadRequest("البريد الإلكتروني مستخدم بالفعل");
 
+            if (await _userManager.Users.AnyAsync(u => u.PhoneNumber == registerDto.PhoneNumber))
+                return BadRequest("رقم الهاتف مستخدم بالفعل");
+
             var user = new ApplicationUser
             {
                 UserName = registerDto.Username,
@@ -122,7 +188,220 @@ namespace reactBackend.Controllers
             // إضافة الدور الافتراضي "user"
             await _userManager.AddToRoleAsync(user, "user");
 
-            return Ok(new { message = "تم إنشاء الحساب بنجاح" });
+            // إرسال رمز OTP للتحقق من رقم الهاتف
+            var otp = _otpService.GenerateOtp();
+            if (!string.IsNullOrEmpty(user.PhoneNumber))
+            {
+                _otpService.StoreOtp(user.PhoneNumber, otp);
+            }
+            else
+            {
+                return BadRequest("رقم الهاتف غير متوفر للمستخدم");
+            }
+
+            // في بيئة الإنتاج سيتم إرسال الرمز عبر SMS
+            var isDevelopment = _configuration["ASPNETCORE_ENVIRONMENT"] == "Development";
+
+            if (isDevelopment)
+            {
+                return Ok(new
+                {
+                    message = "تم إنشاء الحساب بنجاح. الرجاء التحقق من رقم هاتفك",
+                    requirePhoneVerification = true,
+                    phoneNumber = user.PhoneNumber,
+                    testOtp = otp  // في بيئة الإنتاج يجب إزالة هذا
+                });
+            }
+            else
+            {
+                return Ok(new
+                {
+                    message = "تم إنشاء الحساب بنجاح. الرجاء التحقق من رقم هاتفك",
+                    requirePhoneVerification = true,
+                    phoneNumber = user.PhoneNumber
+                });
+            }
+        }
+
+        [HttpPost("verify-phone")]
+        public async Task<IActionResult> VerifyPhone([FromBody] VerifyOtpDto model)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.PhoneNumber == model.PhoneNumber);
+            
+            if (user == null)
+                return BadRequest("المستخدم غير موجود");
+
+            // التحقق من صحة رمز OTP
+            bool isValidOtp = _otpService.VerifyOtp(model.PhoneNumber, model.Otp);
+            
+            if (!isValidOtp)
+                return BadRequest("رمز التحقق غير صحيح أو منتهي الصلاحية");
+
+            // تحديث حالة تأكيد رقم الهاتف
+            user.PhoneNumberConfirmed = true;
+            await _userManager.UpdateAsync(user);
+
+            // حذف رمز OTP بعد التحقق الناجح
+            _otpService.RemoveOtp(model.PhoneNumber);
+
+            var userRoles = await _userManager.GetRolesAsync(user);
+            var token = await CreateToken(user);
+
+            return Ok(new
+            {
+                token,
+                user = new
+                {
+                    id = user.Id,
+                    email = user.Email,
+                    userName = user.UserName,
+                    name = user.Name,
+                    phoneNumber = user.PhoneNumber,
+                    role = userRoles.FirstOrDefault()?.ToLower()
+                }
+            });
+        }
+
+        [HttpPost("resend-otp")]
+        public async Task<IActionResult> ResendOtp([FromBody] ResendOtpDto model)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.PhoneNumber == model.PhoneNumber);
+            
+            if (user == null)
+                return BadRequest("المستخدم غير موجود");
+
+            // إرسال رمز OTP جديد
+            var otp = _otpService.GenerateOtp();
+            _otpService.StoreOtp(user.PhoneNumber, otp);
+
+            // في بيئة الإنتاج سيتم إرسال الرمز عبر SMS
+            var isDevelopment = _configuration["ASPNETCORE_ENVIRONMENT"] == "Development";
+
+            if (isDevelopment)
+            {
+                return Ok(new
+                {
+                    message = "تم إرسال رمز جديد إلى هاتفك المحمول",
+                    testOtp = otp  // في بيئة الإنتاج يجب إزالة هذا
+                });
+            }
+            else
+            {
+                return Ok(new
+                {
+                    message = "تم إرسال رمز جديد إلى هاتفك المحمول"
+                });
+            }
+        }
+
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto model)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var user = await _userManager.FindByEmailAsync(model.Email);
+            if (user == null)
+                // إرجاع رسالة نجاح حتى لو كان المستخدم غير موجود (لأسباب أمنية)
+                return Ok(new { message = "إذا كان البريد الإلكتروني مسجلاً، سيتم إرسال رمز التحقق إلى هاتفك المحمول" });
+
+            // إرسال رمز OTP للتحقق وإعادة تعيين كلمة المرور
+            var otp = _otpService.GenerateOtp();
+            if (!string.IsNullOrEmpty(user.PhoneNumber))
+            {
+                _otpService.StoreOtp(user.PhoneNumber, otp, "ResetPassword");
+            }
+            else
+            {
+                // بدلاً من إرجاع خطأ، نحتفظ بالرسالة العامة لأسباب أمنية
+                return Ok(new { message = "إذا كان البريد الإلكتروني مسجلاً، سيتم إرسال رمز التحقق إلى هاتفك المحمول" });
+            }
+
+            // في بيئة الإنتاج سيتم إرسال الرمز عبر SMS
+            var isDevelopment = _configuration["ASPNETCORE_ENVIRONMENT"] == "Development";
+
+            if (isDevelopment)
+            {
+                return Ok(new
+                {
+                    message = "تم إرسال رمز التحقق إلى هاتفك المحمول",
+                    phoneNumber = user.PhoneNumber,
+                    testOtp = otp  // في بيئة الإنتاج يجب إزالة هذا
+                });
+            }
+            else
+            {
+                return Ok(new
+                {
+                    message = "تم إرسال رمز التحقق إلى هاتفك المحمول",
+                    phoneNumber = user.PhoneNumber
+                });
+            }
+        }
+
+        [HttpPost("verify-reset-otp")]
+        public async Task<IActionResult> VerifyResetOtp([FromBody] VerifyOtpDto model)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.PhoneNumber == model.PhoneNumber);
+            
+            if (user == null)
+                return BadRequest("المستخدم غير موجود");
+
+            // التحقق من صحة رمز OTP
+            bool isValidOtp = _otpService.VerifyOtp(model.PhoneNumber, model.Otp, "ResetPassword");
+            
+            if (!isValidOtp)
+                return BadRequest("رمز التحقق غير صحيح أو منتهي الصلاحية");
+
+            // إنشاء رمز إعادة تعيين كلمة المرور مؤقت
+            var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
+
+            return Ok(new
+            {
+                message = "تم التحقق بنجاح. يمكنك الآن إعادة تعيين كلمة المرور",
+                email = user.Email,
+                token = resetToken
+            });
+        }
+
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto model)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var user = await _userManager.FindByEmailAsync(model.Email);
+            if (user == null)
+                return BadRequest(new { message = "فشلت عملية إعادة تعيين كلمة المرور" });
+
+            // تنفيذ إعادة تعيين كلمة المرور
+            var result = await _userManager.ResetPasswordAsync(user, model.Token, model.NewPassword);
+
+            if (!result.Succeeded)
+            {
+                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                return BadRequest(new { message = "فشلت عملية إعادة تعيين كلمة المرور", errors });
+            }
+
+            // تحديث الطابع الأمني
+            await _userManager.UpdateSecurityStampAsync(user);
+
+            // حذف رمز OTP بعد إعادة تعيين كلمة المرور بنجاح
+            if (!string.IsNullOrEmpty(user.PhoneNumber))
+            {
+                _otpService.RemoveOtp(user.PhoneNumber, "ResetPassword");
+            }
+
+            return Ok(new { message = "تم إعادة تعيين كلمة المرور بنجاح" });
         }
 
         [HttpGet]
@@ -165,9 +444,6 @@ namespace reactBackend.Controllers
             });
         }
 
-
-
-
         [HttpGet("stats")]
         [Authorize(Roles = "admin")]
         public async Task<ActionResult> GetUserStats()
@@ -183,7 +459,6 @@ namespace reactBackend.Controllers
                 RegularUserCount = regularUserCount
             });
         }
-
 
         [HttpPost("check-email")]
         [Authorize]
@@ -226,11 +501,61 @@ namespace reactBackend.Controllers
                         return BadRequest("البريد الإلكتروني مستخدم بالفعل");
                 }
 
+                // التحقق من رقم الهاتف
+                if (user.PhoneNumber != model.PhoneNumber && !string.IsNullOrEmpty(model.PhoneNumber))
+                {
+                    var existingPhone = await _userManager.Users.AnyAsync(u => 
+                        u.PhoneNumber == model.PhoneNumber && u.Id != userId);
+                        
+                    if (existingPhone)
+                        return BadRequest("رقم الهاتف مستخدم بالفعل");
+                        
+                    // إذا تم تغيير رقم الهاتف، نحتاج إلى تأكيده مرة أخرى
+                    if (model.VerifyNewPhone)
+                    {
+                        // إرسال رمز OTP للتحقق من رقم الهاتف الجديد
+                        var otp = _otpService.GenerateOtp();
+                        if (!string.IsNullOrEmpty(model.PhoneNumber))
+                        {
+                            _otpService.StoreOtp(model.PhoneNumber, otp, "UpdatePhone");
+                        }
+                        else
+                        {
+                            return BadRequest("رقم الهاتف غير صالح");
+                        }
+                        
+                        // حفظ رقم الهاتف الجديد في متغير مؤقت لاستخدامه عند التحقق
+                        user.NewPhoneNumber = model.PhoneNumber;
+                        await _userManager.UpdateAsync(user);
+                        
+                        var isDevelopment = _configuration["ASPNETCORE_ENVIRONMENT"] == "Development";
+                        if (isDevelopment)
+                        {
+                            return Ok(new
+                            {
+                                requirePhoneVerification = true,
+                                phoneNumber = model.PhoneNumber,
+                                message = "الرجاء التحقق من رقم الهاتف الجديد",
+                                testOtp = otp
+                            });
+                        }
+                        else
+                        {
+                            return Ok(new
+                            {
+                                requirePhoneVerification = true,
+                                phoneNumber = model.PhoneNumber,
+                                message = "الرجاء التحقق من رقم الهاتف الجديد"
+                            });
+                        }
+                    }
+                }
+
                 // تحديث المعلومات
                 user.Name = model.Name;
                 user.Email = model.Email;
                 user.UserName = model.Email;
-                user.PhoneNumber = model.PhoneNumber ?? user.PhoneNumber;
+                // سيتم تحديث رقم الهاتف بعد التحقق منه إذا تم تغييره
 
                 var result = await _userManager.UpdateAsync(user);
                 if (!result.Succeeded)
@@ -256,6 +581,51 @@ namespace reactBackend.Controllers
                 Console.WriteLine($"Stack trace: {ex.StackTrace}");
                 return StatusCode(500, new { error = "An error occurred", message = ex.Message });
             }
+        }
+
+        [HttpPost("verify-new-phone")]
+        [Authorize]
+        public async Task<IActionResult> VerifyNewPhone([FromBody] VerifyOtpDto model)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (userId == null)
+                return Unauthorized();
+
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+                return NotFound("المستخدم غير موجود");
+
+            // التحقق من صحة رمز OTP
+            bool isValidOtp = _otpService.VerifyOtp(model.PhoneNumber, model.Otp, "UpdatePhone");
+            
+            if (!isValidOtp)
+                return BadRequest("رمز التحقق غير صحيح أو منتهي الصلاحية");
+
+            // تحديث رقم الهاتف
+            user.PhoneNumber = model.PhoneNumber;
+            user.PhoneNumberConfirmed = true;
+            user.NewPhoneNumber = string.Empty;
+            await _userManager.UpdateAsync(user);
+
+            // حذف رمز OTP بعد التحقق الناجح
+            if (!string.IsNullOrEmpty(model.PhoneNumber))
+            {
+                _otpService.RemoveOtp(model.PhoneNumber, "UpdatePhone");
+            }
+
+            return Ok(new
+            {
+                message = "تم تحديث رقم الهاتف بنجاح",
+                id = user.Id,
+                email = user.Email,
+                userName = user.UserName,
+                name = user.Name,
+                phoneNumber = user.PhoneNumber,
+                roles = await _userManager.GetRolesAsync(user)
+            });
         }
 
         [HttpPost("change-password")]
