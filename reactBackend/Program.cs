@@ -93,7 +93,9 @@ builder.Services.AddCors(options =>
             builder
                 .WithOrigins(
                     "https://recat-onlinestore.netlify.app",
-                    "http://localhost:5173"
+                    "http://localhost:5173",
+                        "https://reactonlinestore-app-h5atcvhec8dcd0da.eastasia-01.azurewebsites.net"
+
                                     )
                 .AllowAnyHeader()
                 .AllowAnyMethod()
@@ -123,6 +125,7 @@ builder.Services.AddAuthentication(options =>
 });
 
 var app = builder.Build();
+app.UseDeveloperExceptionPage();
 
 // Configure Swagger
 app.UseSwagger();
@@ -134,6 +137,11 @@ app.UseSwaggerUI(c =>
 
 // إضافة دعم الملفات الثابتة
 app.UseStaticFiles();
+
+if (app.Environment.IsDevelopment() || app.Environment.IsProduction()) // مؤقتًا للتشخيص
+{
+    app.UseDeveloperExceptionPage();
+}
 
 // تكوين مجلد الصور
 app.UseStaticFiles(new StaticFileOptions
@@ -178,12 +186,15 @@ app.Use(async (context, next) =>
     }
 });
 
+
+
 app.UseHttpsRedirection();
 app.UseRouting();
 app.UseCors("AllowReactApp");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.UseDeveloperExceptionPage();
 
 
 // Ensure database is created and migrations are applied
@@ -250,6 +261,17 @@ using (var scope = app.Services.CreateScope())
         var logger = services.GetRequiredService<ILogger<Program>>();
         logger.LogError(ex, "An error occurred while migrating the database.");
     }
+}
+string wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
+if (!Directory.Exists(wwwrootPath))
+{
+    Directory.CreateDirectory(wwwrootPath);
+}
+
+string imagesPath = Path.Combine(wwwrootPath, "images");
+if (!Directory.Exists(imagesPath))
+{
+    Directory.CreateDirectory(imagesPath);
 }
 
 app.Run();
