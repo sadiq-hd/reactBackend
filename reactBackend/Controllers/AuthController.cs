@@ -87,39 +87,58 @@ namespace reactBackend.Controllers
                 return BadRequest("البريد الإلكتروني أو رقم الهاتف أو كلمة المرور غير صحيحة");
 
             // إرسال رمز OTP للتحقق ثنائي العامل
+            // var otp = _otpService.GenerateOtp();
+            // if (!string.IsNullOrEmpty(user.PhoneNumber))
+            // {
+            //     _otpService.StoreOtp(user.PhoneNumber, otp);
+            // }
+            // else
+            // {
+            //     return BadRequest("رقم الهاتف غير متوفر للمستخدم");
+            // }
+
+            // // في بيئة الإنتاج سيتم إرسال الرمز عبر SMS
+            // // هنا نقوم بإرجاع الرمز للاختبار فقط
+            // var isDevelopment = _configuration["ASPNETCORE_ENVIRONMENT"] == "Development";
+
+            // if (isDevelopment)
+            // {
+            //     return Ok(new
+            //     {
+            //         requireOtp = true,
+            //         phoneNumber = user.PhoneNumber,
+            //         message = "تم إرسال رمز التحقق إلى هاتفك المحمول",
+            //         testOtp = otp  // في بيئة الإنتاج يجب إزالة هذا
+            //     });
+            // }
+            // else
+            // {
+            //     return Ok(new
+            //     {
+            //         requireOtp = true,
+            //         phoneNumber = user.PhoneNumber,
+            //         message = "تم إرسال رمز التحقق إلى هاتفك المحمول"
+            //     });
+            // }
             var otp = _otpService.GenerateOtp();
-            if (!string.IsNullOrEmpty(user.PhoneNumber))
-            {
-                _otpService.StoreOtp(user.PhoneNumber, otp);
-            }
-            else
-            {
-                return BadRequest("رقم الهاتف غير متوفر للمستخدم");
-            }
+    if (!string.IsNullOrEmpty(user.PhoneNumber))
+    {
+        _otpService.StoreOtp(user.PhoneNumber, otp);
+    }
+    else
+    {
+        return BadRequest("رقم الهاتف غير متوفر للمستخدم");
+    }
 
-            // في بيئة الإنتاج سيتم إرسال الرمز عبر SMS
-            // هنا نقوم بإرجاع الرمز للاختبار فقط
-            var isDevelopment = _configuration["ASPNETCORE_ENVIRONMENT"] == "Development";
+    // إرجاع الرمز دائماً بغض النظر عن البيئة
+    return Ok(new
+    {
+        requireOtp = true,
+        phoneNumber = user.PhoneNumber,
+        message = "تم إرسال رمز التحقق إلى هاتفك المحمول",
+        otp = otp  // إضافة الرمز للاستجابة
+    });
 
-            if (isDevelopment)
-            {
-                return Ok(new
-                {
-                    requireOtp = true,
-                    phoneNumber = user.PhoneNumber,
-                    message = "تم إرسال رمز التحقق إلى هاتفك المحمول",
-                    testOtp = otp  // في بيئة الإنتاج يجب إزالة هذا
-                });
-            }
-            else
-            {
-                return Ok(new
-                {
-                    requireOtp = true,
-                    phoneNumber = user.PhoneNumber,
-                    message = "تم إرسال رمز التحقق إلى هاتفك المحمول"
-                });
-            }
         }
 
         [HttpPost("verify-otp")]
@@ -189,38 +208,57 @@ namespace reactBackend.Controllers
             await _userManager.AddToRoleAsync(user, "user");
 
             // إرسال رمز OTP للتحقق من رقم الهاتف
-            var otp = _otpService.GenerateOtp();
-            if (!string.IsNullOrEmpty(user.PhoneNumber))
-            {
-                _otpService.StoreOtp(user.PhoneNumber, otp);
-            }
-            else
-            {
-                return BadRequest("رقم الهاتف غير متوفر للمستخدم");
-            }
+            // var otp = _otpService.GenerateOtp();
+            // if (!string.IsNullOrEmpty(user.PhoneNumber))
+            // {
+            //     _otpService.StoreOtp(user.PhoneNumber, otp);
+            // }
+            // else
+            // {
+            //     return BadRequest("رقم الهاتف غير متوفر للمستخدم");
+            // }
 
-            // في بيئة الإنتاج سيتم إرسال الرمز عبر SMS
-            var isDevelopment = _configuration["ASPNETCORE_ENVIRONMENT"] == "Development";
+            // // في بيئة الإنتاج سيتم إرسال الرمز عبر SMS
+            // var isDevelopment = _configuration["ASPNETCORE_ENVIRONMENT"] == "Development";
 
-            if (isDevelopment)
-            {
-                return Ok(new
-                {
-                    message = "تم إنشاء الحساب بنجاح. الرجاء التحقق من رقم هاتفك",
-                    requirePhoneVerification = true,
-                    phoneNumber = user.PhoneNumber,
-                    testOtp = otp  // في بيئة الإنتاج يجب إزالة هذا
-                });
-            }
-            else
-            {
-                return Ok(new
-                {
-                    message = "تم إنشاء الحساب بنجاح. الرجاء التحقق من رقم هاتفك",
-                    requirePhoneVerification = true,
-                    phoneNumber = user.PhoneNumber
-                });
-            }
+            // if (isDevelopment)
+            // {
+            //     return Ok(new
+            //     {
+            //         message = "تم إنشاء الحساب بنجاح. الرجاء التحقق من رقم هاتفك",
+            //         requirePhoneVerification = true,
+            //         phoneNumber = user.PhoneNumber,
+            //         testOtp = otp  // في بيئة الإنتاج يجب إزالة هذا
+            //     });
+            // }
+            // else
+            // {
+            //     return Ok(new
+            //     {
+            //         message = "تم إنشاء الحساب بنجاح. الرجاء التحقق من رقم هاتفك",
+            //         requirePhoneVerification = true,
+            //         phoneNumber = user.PhoneNumber
+            //     });
+            // }
+              var otp = _otpService.GenerateOtp();
+    if (!string.IsNullOrEmpty(user.PhoneNumber))
+    {
+        _otpService.StoreOtp(user.PhoneNumber, otp);
+    }
+    else
+    {
+        return BadRequest("رقم الهاتف غير متوفر للمستخدم");
+    }
+
+    // إرجاع الرمز دائماً بغض النظر عن البيئة
+    return Ok(new
+    {
+        message = "تم إنشاء الحساب بنجاح. الرجاء التحقق من رقم هاتفك",
+        requirePhoneVerification = true,
+        phoneNumber = user.PhoneNumber,
+        otp = otp  // إضافة الرمز للاستجابة
+    });
+
         }
 
         [HttpPost("verify-phone")]
@@ -295,7 +333,8 @@ namespace reactBackend.Controllers
             {
                 return Ok(new
                 {
-                    message = "تم إرسال رمز جديد إلى هاتفك المحمول"
+                    message = "تم إرسال رمز جديد إلى هاتفك المحمول",
+                     testOtp = otp 
                 });
             }
         }
@@ -340,7 +379,9 @@ namespace reactBackend.Controllers
                 return Ok(new
                 {
                     message = "تم إرسال رمز التحقق إلى هاتفك المحمول",
-                    phoneNumber = user.PhoneNumber
+                    phoneNumber = user.PhoneNumber,
+                    testOtp = otp  // في بيئة الإنتاج يجب إزالة هذا
+
                 });
             }
         }
@@ -543,9 +584,10 @@ namespace reactBackend.Controllers
                         {
                             return Ok(new
                             {
-                                requirePhoneVerification = true,
+                                 requirePhoneVerification = true,
                                 phoneNumber = model.PhoneNumber,
-                                message = "الرجاء التحقق من رقم الهاتف الجديد"
+                                message = "الرجاء التحقق من رقم الهاتف الجديد",
+                                testOtp = otp
                             });
                         }
                     }
