@@ -92,7 +92,7 @@ builder.Services.AddCors(options =>
         {
             builder
                 .WithOrigins(
-                    "https://recat-onlinestore.netlify.app",
+                    "https://shuttercart.netlify.app",
                     "http://localhost:5173",
                         "https://reactonlinestore-app-h5atcvhec8dcd0da.eastasia-01.azurewebsites.net"
 
