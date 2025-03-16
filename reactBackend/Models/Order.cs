@@ -46,8 +46,8 @@ public class Order
     public virtual PromoCode? PromoCode { get; set; }
 
     // تعديل FinalAmount ليأخذ في الاعتبار مبلغ الخصم
-    public decimal FinalAmount => TotalAmount + DeliveryFee - DiscountAmount;
-
+// الصيغة الصحيحة لحساب الإجمالي النهائي
+public decimal FinalAmount => TotalAmount + DeliveryFee;
     public virtual List<OrderItem> Items { get; set; }
     public virtual PaymentDetails? PaymentDetails { get; set; }
     public virtual DeliveryAddress? Address { get; set; }

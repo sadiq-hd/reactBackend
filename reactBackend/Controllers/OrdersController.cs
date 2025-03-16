@@ -150,6 +150,7 @@ namespace reactBackend.Controllers
                     // 7. حساب المبالغ مع تطبيق الخصومات
                     decimal subtotal = 0;
                     decimal totalDiscount = 0;
+                    decimal originalSubtotal = 0; // إضافة متغير جديد للمجموع الأصلي
                     var orderItems = new List<OrderItem>();
 
                     foreach (var item in cartItems)
@@ -158,8 +159,8 @@ namespace reactBackend.Controllers
 
                         // حساب السعر الأصلي
                         decimal originalPrice = item.Product.Price;
-                        decimal originalTotal = originalPrice * item.Quantity;
-                        subtotal += originalTotal;
+                        decimal originalItemTotal = originalPrice * item.Quantity;
+                        originalSubtotal += originalItemTotal; // تجميع المجموع الأصلي قبل الخصم
 
                         // البحث عن الخصومات المطبقة على هذا المنتج
                         var applicableDiscounts = activeDiscounts.Where(d =>
@@ -183,34 +184,38 @@ namespace reactBackend.Controllers
                             // حساب مبلغ الخصم للوحدة الواحدة ثم للكمية الكلية
                             decimal unitDiscountAmount = originalPrice - finalPrice;
                             discountAmount = unitDiscountAmount * item.Quantity;
-
                             totalDiscount += discountAmount;
                         }
+
+                        // حساب المجموع بعد الخصم لهذا العنصر وإضافته للمجموع الكلي
+                        decimal itemFinalTotal = finalPrice * item.Quantity;
+                        subtotal += itemFinalTotal; // استخدام السعر بعد الخصم لحساب المجموع الفرعي
 
                         // إنشاء عنصر الطلب
                         var orderItem = new OrderItem
                         {
                             ProductId = item.ProductId,
-                            ProductName = item.Product.Name ?? "", // استخدام اسم المنتج
+                            ProductName = item.Product.Name ?? "",
                             Quantity = item.Quantity,
-                            Price = finalPrice,  // السعر بعد الخصم (للوحدة)
-                            OriginalPrice = originalPrice,  // السعر الأصلي (قبل الخصم)
-                            DiscountAmount = discountAmount,  // مبلغ الخصم الإجمالي للكمية
-                            Total = finalPrice * item.Quantity  // المجموع بعد الخصم
+                            Price = finalPrice,
+                            OriginalPrice = originalPrice,
+                            DiscountAmount = discountAmount,
+                            Total = itemFinalTotal
                         };
 
                         // إضافة معلومات الخصم إذا كان موجوداً
                         if (appliedDiscount != null)
                         {
-                            orderItem.DiscountName = appliedDiscount.Name; // تعيين اسم الخصم
+                            orderItem.DiscountName = appliedDiscount.Name;
                             orderItem.DiscountId = appliedDiscount.Id;
                         }
 
                         orderItems.Add(orderItem);
                     }
 
-                    decimal vat = Math.Round((subtotal - totalDiscount) * 0.15m / 1.15m, 2); // 15% من السعر الشامل للضريبة
-                    decimal total = subtotal - totalDiscount; // هذا هو المجموع الكلي ويشمل الضريبة
+                    // استخدام المجموع بعد الخصم لحساب الضريبة (subtotal هنا يساوي المجموع بعد الخصم)
+                    decimal vat = Math.Round(subtotal * 0.15m / 1.15m, 2); // 15% من السعر الشامل للضريبة
+                    decimal total = subtotal; // المجموع الفرعي بعد الخصم يشمل الضريبة بالفعل
                     decimal deliveryFee = 25m;
 
                     // 8. إنشاء الطلب

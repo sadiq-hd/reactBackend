@@ -231,6 +231,43 @@ namespace reactBackend.Controllers
             return NoContent();
         }
 
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteDiscount(int id)
+        {
+            var discount = await _context.Discounts
+                .Include(d => d.Products)
+                .FirstOrDefaultAsync(d => d.Id == id);
+
+            if (discount == null)
+            {
+                return NotFound();
+            }
+
+            // فحص وإزالة العلاقات مع عناصر الطلبات
+            var orderItems = await _context.OrderItems
+                .Where(oi => oi.DiscountId == id)
+                .ToListAsync();
+
+            foreach (var item in orderItems)
+            {
+                item.DiscountId = null;
+                item.DiscountName = null;
+                _context.Entry(item).State = EntityState.Modified;
+            }
+
+            // إزالة العلاقات مع المنتجات
+            if (discount.Products != null && discount.Products.Any())
+            {
+                _context.DiscountProducts.RemoveRange(discount.Products);
+            }
+
+            // حذف الخصم
+            _context.Discounts.Remove(discount);
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
         [HttpGet("active")]
         [AllowAnonymous] // يسمح بالوصول العام للخصومات النشطة
         public async Task<ActionResult<IEnumerable<DiscountResponseDto>>> GetActiveDiscounts()
