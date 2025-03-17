@@ -1072,19 +1072,15 @@ namespace reactBackend.Controllers
 
             try
             {
-                var isAdmin = User.Claims
-                    .Any(c => c.Type == ClaimTypes.Role && c.Value.ToLower() == "admin");
+                // التحقق من صلاحيات المستخدم
+                var isAdmin = User.IsInRole("admin");
 
-                var orderQuery = _context.Orders
+                var order = await _context.Orders
                     .Include(o => o.Items)
                         .ThenInclude(i => i.Product)
                     .Include(o => o.PaymentDetails)
-                    .Include(o => o.Address);
-
-                // إذا كان المستخدم ليس أدمن، نقيد البحث بالمستخدم الحالي فقط
-                var order = await (isAdmin
-                    ? orderQuery.FirstOrDefaultAsync(o => o.Id == id)
-                    : orderQuery.FirstOrDefaultAsync(o => o.Id == id && o.UserId == userId));
+                    .Include(o => o.Address)
+                    .FirstOrDefaultAsync(o => o.Id == id && (o.UserId == userId || isAdmin));
 
                 if (order == null)
                     return Problem(
@@ -1093,50 +1089,73 @@ namespace reactBackend.Controllers
                         detail: "لم يتم العثور على الطلب"
                     );
 
-                if (string.IsNullOrEmpty(order.InvoicePath))
+                // إنشاء الفاتورة مباشرة
+                string htmlContent = GenerateInvoiceHtml(order);
+
+                var globalSettings = new GlobalSettings
                 {
-                    try
+                    ColorMode = ColorMode.Color,
+                    Orientation = Orientation.Portrait,
+                    PaperSize = PaperKind.A4,
+                    Margins = new MarginSettings { Top = 10, Bottom = 10, Left = 10, Right = 10 },
+                    DocumentTitle = $"Invoice-{order.Id}"
+                };
+
+                var objectSettings = new ObjectSettings
+                {
+                    PagesCount = true,
+                    HtmlContent = htmlContent,
+                    WebSettings = { DefaultEncoding = "utf-8" },
+                    HeaderSettings = new HeaderSettings
                     {
-                        await GenerateInvoiceForOrder(order);
-                    }
-                    catch (Exception ex)
+                        FontName = "Arial",
+                        FontSize = 9,
+                        Right = "Page [page] of [toPage]",
+                        Left = $"رقم الطلب: {order.Id}",
+                        Line = true
+                    },
+                    FooterSettings = new FooterSettings
                     {
-                        return Problem(
-                            statusCode: 500,
-                            title: "خطأ في النظام",
-                            detail: "فشل في إنشاء الفاتورة"
-                        );
+                        FontName = "Arial",
+                        FontSize = 9,
+                        Line = true,
+                        Center = $"© {DateTime.Now.Year} Sadiq Aldubaisi  متجرنا"
                     }
+                };
+
+                var pdf = new HtmlToPdfDocument()
+                {
+                    GlobalSettings = globalSettings,
+                    Objects = { objectSettings }
+                };
+
+                // تحويل HTML إلى PDF
+                byte[] pdfBytes;
+                try
+                {
+                    pdfBytes = _pdfConverter.Convert(pdf);
+                    _logger.LogInformation($"Invoice for order {order.Id} generated successfully");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError($"Error converting HTML to PDF: {ex.Message}");
+                    return Problem(
+                        statusCode: 500,
+                        title: "خطأ في النظام",
+                        detail: "حدث خطأ أثناء إنشاء الفاتورة"
+                    );
                 }
 
-                var filePath = Path.Combine(_environment.WebRootPath, order.InvoicePath.TrimStart('/'));
-                if (!System.IO.File.Exists(filePath))
-                {
-                    try
-                    {
-                        await GenerateInvoiceForOrder(order);
-                        filePath = Path.Combine(_environment.WebRootPath, order.InvoicePath.TrimStart('/'));
-                    }
-                    catch (Exception ex)
-                    {
-                        return Problem(
-                            statusCode: 500,
-                            title: "خطأ في النظام",
-                            detail: "فشل في إعادة إنشاء الفاتورة"
-                        );
-                    }
-                }
-
-                var fileBytes = await System.IO.File.ReadAllBytesAsync(filePath);
-                return File(fileBytes, "application/pdf", Path.GetFileName(filePath));
+                // إرجاع الفاتورة مباشرة للمتصفح
+                return File(pdfBytes, "application/pdf", $"Invoice-{order.Id}.pdf");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generating/retrieving invoice for order {OrderId}", id);
+                _logger.LogError(ex, "Error generating invoice for order {OrderId}", id);
                 return Problem(
                     statusCode: 500,
                     title: "خطأ في النظام",
-                    detail: "حدث خطأ أثناء جلب الفاتورة"
+                    detail: $"حدث خطأ أثناء إنشاء الفاتورة: {ex.Message}"
                 );
             }
         }
