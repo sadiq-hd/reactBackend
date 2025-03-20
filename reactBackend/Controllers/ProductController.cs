@@ -93,7 +93,7 @@ namespace reactBackend.Controllers
 
         // POST: api/products/{id}/images
         [HttpPost("{id}/images")]
-        
+        [Authorize]
         public async Task<ActionResult<ProductImage>> UploadImage(int id, IFormFile image)
         {
             var product = await _context.Products.FindAsync(id);
@@ -190,7 +190,6 @@ namespace reactBackend.Controllers
        
 
         [HttpGet("top-selling")]
-        [Authorize]
         public async Task<ActionResult<object>> GetTopSellingProducts([FromQuery] int limit = 5)
         {
             try
@@ -430,6 +429,196 @@ namespace reactBackend.Controllers
                 })
                 .ToListAsync();
             return Ok(products);
+        }
+
+        // إضافة هذه الدوال إلى ProductsController.cs
+
+        // هذه الدالة لجلب المنتجات مع التقييمات
+        [HttpGet("with-ratings")]
+        public async Task<ActionResult<IEnumerable<object>>> GetProductsWithRatings()
+        {
+            try
+            {
+                var products = await _context.Products
+                    .Include(p => p.Images)
+                    .Include(p => p.Reviews)
+                    .Select(p => new
+                    {
+                        p.Id,
+                        p.Name,
+                        p.Category,
+                        p.Description,
+                        p.Price,
+                        p.Stock,
+                        Images = p.Images.Select(i => i.ImageUrl).ToList(),
+                        AverageRating = p.Reviews.Any() ? Math.Round(p.Reviews.Average(r => r.Rating), 1) : 0,
+                        TotalReviews = p.Reviews.Count
+                    })
+                    .ToListAsync();
+
+                return Ok(products);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "حدث خطأ أثناء جلب المنتجات", message = ex.Message });
+            }
+        }
+
+        // هذه الدالة لجلب منتج واحد مع التقييمات والتعليقات
+        [HttpGet("{id}/with-ratings")]
+        public async Task<ActionResult<object>> GetProductWithRatings(int id)
+        {
+            try
+            {
+                var product = await _context.Products
+                    .Include(p => p.Images)
+                    .Include(p => p.Reviews)
+                        .ThenInclude(r => r.User)
+                    .FirstOrDefaultAsync(p => p.Id == id);
+
+                if (product == null)
+                {
+                    return NotFound("المنتج غير موجود");
+                }
+
+                // حساب متوسط التقييم
+                var averageRating = product.Reviews.Any() ? Math.Round(product.Reviews.Average(r => r.Rating), 1) : 0;
+
+                // حساب توزيع التقييمات
+                var ratingDistribution = new Dictionary<int, int>();
+                for (int i = 1; i <= 5; i++)
+                {
+                    ratingDistribution[i] = product.Reviews.Count(r => r.Rating == i);
+                }
+
+                // جلب أحدث 5 تقييمات
+                var latestReviews = product.Reviews
+                    .OrderByDescending(r => r.CreatedAt)
+                    .Take(5)
+                    .Select(r => new
+                    {
+                        r.Id,
+                        r.Rating,
+                        r.Comment,
+                        r.CreatedAt,
+                        r.IsVerifiedPurchase,
+                        UserName = r.User?.Name ?? "مستخدم"
+                    })
+                    .ToList();
+
+                // إنشاء الكائن النهائي للاستجابة
+                var result = new
+                {
+                    product.Id,
+                    product.Name,
+                    product.Category,
+                    product.Description,
+                    product.Price,
+                    product.Stock,
+                    Images = product.Images.Select(i => i.ImageUrl).ToList(),
+                    AverageRating = averageRating,
+                    TotalReviews = product.Reviews.Count,
+                    RatingDistribution = ratingDistribution,
+                    LatestReviews = latestReviews
+                };
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "حدث خطأ أثناء جلب المنتج", message = ex.Message });
+            }
+        }
+
+        // هذه الدالة للبحث عن المنتجات وتصفيتها حسب التقييم
+        [HttpGet("search-with-ratings")]
+        public async Task<ActionResult<IEnumerable<object>>> SearchProductsWithRatings(
+            [FromQuery] string? query = null,
+            [FromQuery] string? category = null,
+            [FromQuery] int? minRating = null)
+        {
+            try
+            {
+                var productsQuery = _context.Products
+                    .Include(p => p.Images)
+                    .Include(p => p.Reviews)
+                    .AsQueryable();
+
+                // تطبيق البحث النصي
+                if (!string.IsNullOrWhiteSpace(query))
+                {
+                    productsQuery = productsQuery.Where(p =>
+                        p.Name.Contains(query) ||
+                        p.Description.Contains(query));
+                }
+
+                // تطبيق تصفية الفئة
+                if (!string.IsNullOrWhiteSpace(category))
+                {
+                    productsQuery = productsQuery.Where(p => p.Category == category);
+                }
+
+                // تنفيذ الاستعلام للحصول على البيانات
+                var products = await productsQuery.ToListAsync();
+
+                // تصفية حسب التقييم (نقوم بذلك في الذاكرة لأن منطق التقييم معقد)
+                var result = products
+                    .Select(p => new
+                    {
+                        p.Id,
+                        p.Name,
+                        p.Category,
+                        p.Description,
+                        p.Price,
+                        p.Stock,
+                        Images = p.Images.Select(i => i.ImageUrl).ToList(),
+                        AverageRating = p.Reviews.Any() ? Math.Round(p.Reviews.Average(r => r.Rating), 1) : 0,
+                        TotalReviews = p.Reviews.Count
+                    });
+
+                // تطبيق تصفية الحد الأدنى للتقييم
+                if (minRating.HasValue)
+                {
+                    result = result.Where(p => p.AverageRating >= minRating.Value);
+                }
+
+                return Ok(result.ToList());
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "حدث خطأ أثناء البحث في المنتجات", message = ex.Message });
+            }
+        }
+
+        // دالة لتحديث التقييم المتوسط للمنتج (تُستخدم عند إضافة أو تعديل التقييمات)
+        [HttpPut("{productId}/rating-summary")]  // أضف هذا السطر
+        [Authorize]
+        public async Task<IActionResult> UpdateProductRatingSummary(int productId)
+        {
+            try
+            {
+                var product = await _context.Products
+                    .Include(p => p.Reviews)
+                    .FirstOrDefaultAsync(p => p.Id == productId);
+
+                if (product == null)
+                {
+                    return NotFound("المنتج غير موجود");
+                }
+
+                // حساب متوسط التقييم
+                product.AverageRating = product.Reviews.Any() ?
+                    Convert.ToDecimal(Math.Round(product.Reviews.Average(r => r.Rating), 1)) :
+                    0m; product.TotalReviews = product.Reviews.Count;
+
+                await _context.SaveChangesAsync();
+
+                return Ok(new { averageRating = product.AverageRating, totalReviews = product.TotalReviews });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "حدث خطأ أثناء تحديث ملخص التقييم", message = ex.Message });
+            }
         }
 
         // DELETE: api/products/5

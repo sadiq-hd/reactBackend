@@ -27,13 +27,26 @@ namespace reactBackend.Models
         [StringLength(1000)]
         public string Description { get; set; } = string.Empty;
 
-       
-        public virtual ICollection<ProductImage> Images { get; set; }
+        // تعديل نوع البيانات ليكون متوافق
+        public decimal? AverageRating { get; set; }
+        public int TotalReviews { get; set; } = 0;
+
+        public virtual ICollection<ProductImage> Images { get; set; } = new List<ProductImage>();
+
         [JsonIgnore]
-        public virtual ICollection<CartItem> CartItems { get; set; }
+        public virtual ICollection<CartItem> CartItems { get; set; } = new List<CartItem>();
+
         [JsonIgnore]
-        public virtual ICollection<WishlistItem> WishlistItems { get; set; }
+        public virtual ICollection<WishlistItem> WishlistItems { get; set; } = new List<WishlistItem>();
+
         [JsonIgnore]
-        public virtual ICollection<OrderItem> OrderItems { get; set; }
+        public virtual ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
+
+        // إضافة مجموعات جديدة للتعليقات والتقييمات
+        [JsonIgnore]
+        public virtual ICollection<ProductComment> Comments { get; set; } = new List<ProductComment>();
+
+        [JsonIgnore]
+        public virtual ICollection<ProductReview> Reviews { get; set; } = new List<ProductReview>();
     }
 }

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using reactBackend.Data;
 
@@ -11,9 +12,11 @@ using reactBackend.Data;
 namespace reactBackend.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250317061728_Addcomment")]
+    partial class Addcomment
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -490,6 +493,9 @@ namespace reactBackend.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("ProductCommentId")
+                        .HasColumnType("int");
+
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
@@ -497,6 +503,8 @@ namespace reactBackend.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CommentId");
+
+                    b.HasIndex("ProductCommentId");
 
                     b.HasIndex("UserId", "CommentId")
                         .IsUnique();
@@ -1041,9 +1049,14 @@ namespace reactBackend.Migrations
             modelBuilder.Entity("reactBackend.Models.CommentLike", b =>
                 {
                     b.HasOne("reactBackend.Models.ProductComment", "Comment")
-                        .WithMany("Likes")
+                        .WithMany()
                         .HasForeignKey("CommentId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("reactBackend.Models.ProductComment", null)
+                        .WithMany("Likes")
+                        .HasForeignKey("ProductCommentId");
 
                     b.HasOne("reactBackend.Models.ApplicationUser", "User")
                         .WithMany("CommentLikes")
@@ -1107,7 +1120,8 @@ namespace reactBackend.Migrations
                 {
                     b.HasOne("reactBackend.Models.ProductComment", "ParentComment")
                         .WithMany("Replies")
-                        .HasForeignKey("ParentCommentId");
+                        .HasForeignKey("ParentCommentId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("reactBackend.Models.Product", "Product")
                         .WithMany("Comments")
