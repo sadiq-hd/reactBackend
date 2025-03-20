@@ -15,6 +15,7 @@ namespace reactBackend.Data
         {
         }
 
+        // الـ DBSet الحالية
         public DbSet<Product> Products { get; set; } = null!;
         public DbSet<ProductImage> ProductImages { get; set; } = null!;
         public DbSet<WishlistItem> WishlistItems { get; set; } = null!;
@@ -29,15 +30,19 @@ namespace reactBackend.Data
         public DbSet<PromoCode> PromoCodes { get; set; } = null!;
         public DbSet<PromoCodeUsage> PromoCodeUsages { get; set; } = null!;
 
+        // إضافة DbSet الجديدة
+        public DbSet<ProductComment> ProductComments { get; set; } = null!;
+        public DbSet<ProductReview> ProductReviews { get; set; } = null!;
+        public DbSet<CommentLike> CommentLikes { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
+            // الإعدادات الحالية للكيانات
             modelBuilder.Entity<Order>()
-        .Property(o => o.InvoicePath)
-        .HasMaxLength(500); // مثلاً
-
+                .Property(o => o.InvoicePath)
+                .HasMaxLength(500);
 
             // تكوين العلاقات لعناوين المستخدمين
             modelBuilder.Entity<UserAddress>()
@@ -93,7 +98,7 @@ namespace reactBackend.Data
 
                 entity.Property(p => p.RefundAmount)
                     .HasColumnType("decimal(18,2)")
-                    .IsRequired(false);  // تم تغييرها هنا
+                    .IsRequired(false);
 
                 entity.Property(p => p.TransactionId)
                     .HasMaxLength(100);
@@ -186,6 +191,11 @@ namespace reactBackend.Data
             ConfigureOrderEntity(modelBuilder);
             ConfigureOrderItemEntity(modelBuilder);
             ConfigureProductEntity(modelBuilder);
+
+            // تكوين العلاقات الجديدة للتعليقات والتقييمات
+            ConfigureProductCommentEntity(modelBuilder);
+            ConfigureProductReviewEntity(modelBuilder);
+            ConfigureCommentLikeEntity(modelBuilder);
         }
 
         private void ConfigureCartItemEntity(ModelBuilder modelBuilder)
@@ -259,6 +269,101 @@ namespace reactBackend.Data
 
             modelBuilder.Entity<Product>()
                 .HasIndex(p => p.Category);
+
+            // إضافة تكوين لمتوسط التقييم
+            modelBuilder.Entity<Product>()
+                .Property(p => p.AverageRating)
+                .HasColumnType("decimal(3,2)");
+        }
+
+        // تكوين كيان التعليقات
+        private void ConfigureProductCommentEntity(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<ProductComment>(entity =>
+            {
+                entity.HasOne(c => c.Product)
+                    .WithMany(p => p.Comments)
+                    .HasForeignKey(c => c.ProductId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(c => c.User)
+                    .WithMany(u => u.Comments)
+                    .HasForeignKey(c => c.UserId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                // تكوين العلاقة مع التعليقات الفرعية (الردود)
+                entity.HasOne(c => c.ParentComment)
+                    .WithMany(c => c.Replies)
+                    .HasForeignKey(c => c.ParentCommentId)
+                     .OnDelete(DeleteBehavior.ClientSetNull)
+                    .IsRequired(false);
+
+                // تحويل قيمة CommentStatus إلى نص
+                entity.Property(c => c.Status)
+                    .HasConversion(
+                        v => v.ToString(),
+                        v => (CommentStatus)Enum.Parse(typeof(CommentStatus), v));
+
+                // إنشاء فهرس للبحث السريع
+                entity.HasIndex(c => c.ProductId);
+                entity.HasIndex(c => c.UserId);
+                entity.HasIndex(c => c.Status);
+            });
+        }
+
+        // تكوين كيان التقييمات
+        private void ConfigureProductReviewEntity(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<ProductReview>(entity =>
+            {
+                entity.HasOne(r => r.Product)
+                    .WithMany(p => p.Reviews)
+                    .HasForeignKey(r => r.ProductId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(r => r.User)
+                    .WithMany(u => u.Reviews)
+                    .HasForeignKey(r => r.UserId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(r => r.Order)
+                    .WithMany()
+                    .HasForeignKey(r => r.OrderId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                // تحويل قيمة ReviewStatus إلى نص
+                entity.Property(r => r.Status)
+                    .HasConversion(
+                        v => v.ToString(),
+                        v => (ReviewStatus)Enum.Parse(typeof(ReviewStatus), v));
+
+                // ضمان أن المستخدم لديه تقييم واحد فقط لكل منتج
+                entity.HasIndex(r => new { r.UserId, r.ProductId }).IsUnique();
+
+                // إنشاء فهرس للبحث السريع
+                entity.HasIndex(r => r.ProductId);
+                entity.HasIndex(r => r.Rating);
+            });
+        }
+
+        // تكوين كيان الإعجابات بالتعليقات
+        private void ConfigureCommentLikeEntity(ModelBuilder modelBuilder)
+        {
+modelBuilder.Entity<CommentLike>(entity =>
+    {
+        entity.HasOne(l => l.Comment)
+            .WithMany(c => c.Likes) // تأكد من أنك أضفت هذه العلاقة في ProductComment
+            .HasForeignKey(l => l.CommentId)
+            .OnDelete(DeleteBehavior.ClientSetNull); // تغيير من Cascade
+
+                entity.HasOne(l => l.User)
+                    .WithMany(u => u.CommentLikes)
+                    .HasForeignKey(l => l.UserId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                // ضمان أن المستخدم لديه إعجاب واحد فقط لكل تعليق
+                entity.HasIndex(l => new { l.UserId, l.CommentId }).IsUnique();
+            });
         }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)

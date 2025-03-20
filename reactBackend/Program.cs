@@ -40,6 +40,7 @@ builder.Services.Configure<FormOptions>(options =>
 // تكوين خدمة الملفات الثابتة
 builder.Services.AddDirectoryBrowser();
 
+builder.Services.AddScoped<IPurchaseVerificationService, PurchaseVerificationService>();
 
 
 // Configure DbContext

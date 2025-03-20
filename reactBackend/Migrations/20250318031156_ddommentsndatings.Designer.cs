@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using reactBackend.Data;
 
@@ -11,9 +12,11 @@ using reactBackend.Data;
 namespace reactBackend.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250318031156_ddommentsndatings")]
+    partial class ddommentsndatings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1043,6 +1046,7 @@ namespace reactBackend.Migrations
                     b.HasOne("reactBackend.Models.ProductComment", "Comment")
                         .WithMany("Likes")
                         .HasForeignKey("CommentId")
+                        .OnDelete(DeleteBehavior.ClientCascade)
                         .IsRequired();
 
                     b.HasOne("reactBackend.Models.ApplicationUser", "User")
