@@ -41,18 +41,38 @@ builder.Services.AddDirectoryBrowser();
 builder.Services.AddScoped<IPurchaseVerificationService, PurchaseVerificationService>();
 
 // Configure DbContext
-var connectionString = builder.Environment.IsDevelopment()
-   ? builder.Configuration.GetConnectionString("LocalConnection")
-   : builder.Configuration.GetConnectionString("AzureConnection");
+// var connectionString = builder.Environment.IsDevelopment()
+//    ? builder.Configuration.GetConnectionString("LocalConnection")
+//    : builder.Configuration.GetConnectionString("AzureConnection");
 
+
+   var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
+   ?? (builder.Environment.IsDevelopment()
+      ? builder.Configuration.GetConnectionString("LocalConnection")
+      : builder.Configuration.GetConnectionString("AzureConnection"));
+
+// اعدادات المحلي
+// builder.Services.AddDbContext<ApplicationDbContext>(options =>
+// {
+//     options.UseSqlServer(connectionString, sqlOptions =>
+//     {
+//         sqlOptions.EnableRetryOnFailure(
+//             maxRetryCount: 5,
+//             maxRetryDelay: TimeSpan.FromSeconds(30),
+//             errorNumbersToAdd: null);
+//     });
+// });
+
+
+// اعداد البرودكشن 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
-    options.UseSqlServer(connectionString, sqlOptions =>
+    options.UseNpgsql(connectionString, npgsqlOptions =>
     {
-        sqlOptions.EnableRetryOnFailure(
+        npgsqlOptions.EnableRetryOnFailure(
             maxRetryCount: 5,
             maxRetryDelay: TimeSpan.FromSeconds(30),
-            errorNumbersToAdd: null);
+            errorCodesToAdd: null);
     });
 });
 
@@ -92,7 +112,8 @@ builder.Services.AddCors(options =>
                 .WithOrigins(
                     "https://shuttercart.netlify.app",
                     "http://localhost:5173",
-                    "https://reactonlinestore-app-h5atcvhec8dcd0da.eastasia-01.azurewebsites.net"
+                    "https://reactonlinestore-app-h5atcvhec8dcd0da.eastasia-01.azurewebsites.net",
+                    "https://reactbackend-production.up.railway.app"
                 )
                 .AllowAnyHeader()
                 .AllowAnyMethod()
