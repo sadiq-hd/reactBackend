@@ -5,10 +5,10 @@ namespace reactBackend.Dtos
     public class LoginDto
     {
         [Required(ErrorMessage = "البريد الإلكتروني أو رقم الهاتف مطلوب")]
-        public required string EmailOrPhone { get; set; }
+        public  string EmailOrPhone { get; set; }
 
         [Required(ErrorMessage = "كلمة المرور مطلوبة")]
-        public required string Password { get; set; }
+        public  string Password { get; set; }
     }
 
 

@@ -8,15 +8,15 @@ namespace reactBackend.Models
 
         [Required]
         [MaxLength(50)]
-        public required string Username { get; set; }
+        public  string Username { get; set; }
 
         [Required]
         [EmailAddress]
         [MaxLength(100)]
-        public required string Email { get; set; }
+        public  string Email { get; set; }
 
         [Required]
-        public required string Password { get; set; }
+        public  string Password { get; set; }
 
         [Required]
         [MaxLength(100)]
@@ -28,7 +28,7 @@ namespace reactBackend.Models
 
         [Required]
         [MaxLength(10)]
-        public required string PhoneNumber { get; set; }
+        public string PhoneNumber { get; set; }
 
         // Navigation Properties
         public virtual ICollection<CartItem> CartItems { get; set; } = new List<CartItem>();

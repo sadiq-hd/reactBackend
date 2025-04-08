@@ -41,7 +41,7 @@ namespace reactBackend.Dtos
 
     public class UpdatePaymentStatusDto
     {
-        public required PaymentStatus NewStatus { get; set; }
+        public  PaymentStatus NewStatus { get; set; }
         public string? TransactionId { get; set; }
         public string? ErrorMessage { get; set; }
         public Dictionary<string, string>? AdditionalData { get; set; }
