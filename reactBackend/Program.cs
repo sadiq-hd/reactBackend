@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
@@ -20,8 +20,6 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<IOtpService, OtpService>();
 
-
-
 // تسجيل خدمة الصور
 builder.Services.AddScoped<IImageService, ImageService>();
 
@@ -41,7 +39,6 @@ builder.Services.Configure<FormOptions>(options =>
 builder.Services.AddDirectoryBrowser();
 
 builder.Services.AddScoped<IPurchaseVerificationService, PurchaseVerificationService>();
-
 
 // Configure DbContext
 var connectionString = builder.Environment.IsDevelopment()
@@ -95,9 +92,8 @@ builder.Services.AddCors(options =>
                 .WithOrigins(
                     "https://shuttercart.netlify.app",
                     "http://localhost:5173",
-                        "https://reactonlinestore-app-h5atcvhec8dcd0da.eastasia-01.azurewebsites.net"
-
-                                    )
+                    "https://reactonlinestore-app-h5atcvhec8dcd0da.eastasia-01.azurewebsites.net"
+                )
                 .AllowAnyHeader()
                 .AllowAnyMethod()
                 .AllowCredentials();
@@ -126,6 +122,26 @@ builder.Services.AddAuthentication(options =>
 });
 
 var app = builder.Build();
+
+// فحص وإنشاء المجلدات اللازمة
+string wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
+if (!Directory.Exists(wwwrootPath))
+{
+    Directory.CreateDirectory(wwwrootPath);
+}
+
+string imagesPath = Path.Combine(wwwrootPath, "images");
+if (!Directory.Exists(imagesPath))
+{
+    Directory.CreateDirectory(imagesPath);
+}
+
+string invoicesPath = Path.Combine(wwwrootPath, "invoices");
+if (!Directory.Exists(invoicesPath))
+{
+    Directory.CreateDirectory(invoicesPath);
+}
+
 app.UseDeveloperExceptionPage();
 
 // Configure Swagger
@@ -147,22 +163,14 @@ if (app.Environment.IsDevelopment() || app.Environment.IsProduction()) // مؤق
 // تكوين مجلد الصور
 app.UseStaticFiles(new StaticFileOptions
 {
-    FileProvider = new PhysicalFileProvider(
-       Path.Combine(builder.Environment.ContentRootPath, "wwwroot", "images")),
+    FileProvider = new PhysicalFileProvider(imagesPath),
     RequestPath = "/images"
 });
-
-// إنشاء مجلد الفواتير إذا لم يكن موجودًا
-string invoiceDirectory = Path.Combine(builder.Environment.ContentRootPath, "wwwroot", "invoices");
-if (!Directory.Exists(invoiceDirectory))
-{
-    Directory.CreateDirectory(invoiceDirectory);
-}
 
 // تكوين مجلد الفواتير
 app.UseStaticFiles(new StaticFileOptions
 {
-    FileProvider = new PhysicalFileProvider(invoiceDirectory),
+    FileProvider = new PhysicalFileProvider(invoicesPath),
     RequestPath = "/invoices"
 });
 
@@ -187,8 +195,6 @@ app.Use(async (context, next) =>
     }
 });
 
-
-
 app.UseHttpsRedirection();
 app.UseRouting();
 app.UseCors("AllowReactApp");
@@ -196,7 +202,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.UseDeveloperExceptionPage();
-
 
 // Ensure database is created and migrations are applied
 using (var scope = app.Services.CreateScope())
@@ -262,17 +267,6 @@ using (var scope = app.Services.CreateScope())
         var logger = services.GetRequiredService<ILogger<Program>>();
         logger.LogError(ex, "An error occurred while migrating the database.");
     }
-}
-string wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
-if (!Directory.Exists(wwwrootPath))
-{
-    Directory.CreateDirectory(wwwrootPath);
-}
-
-string imagesPath = Path.Combine(wwwrootPath, "images");
-if (!Directory.Exists(imagesPath))
-{
-    Directory.CreateDirectory(imagesPath);
 }
 
 app.Run();
