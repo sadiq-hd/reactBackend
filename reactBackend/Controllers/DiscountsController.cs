@@ -268,6 +268,59 @@ namespace reactBackend.Controllers
             return NoContent();
         }
 
+        [HttpGet("discounted-products")]
+        [AllowAnonymous] // يسمح بالوصول العام للمنتجات المخفضة
+        public async Task<ActionResult<IEnumerable<ProductWithDiscountDto>>> GetDiscountedProducts()
+        {
+            var now = DateTime.UtcNow;
+
+            // الحصول على جميع المنتجات التي لها خصومات نشطة
+            var discountedProducts = await _context.DiscountProducts
+                .Where(dp => dp.Discount.IsActive &&
+                             dp.Discount.StartDate <= now &&
+                             dp.Discount.EndDate >= now)
+                .Include(dp => dp.Product)
+                .Include(dp => dp.Product.Images)
+                .Include(dp => dp.Discount)
+                .ToListAsync(); // استرجاع البيانات أولاً ثم إجراء التحويل
+
+            // تحويل البيانات إلى DTO
+            var result = discountedProducts.Select(dp => new ProductWithDiscountDto
+            {
+                Id = dp.ProductId,
+                Name = dp.Product.Name,
+                Description = dp.Product.Description,
+                Price = dp.Product.Price,
+                Stock = dp.Product.Stock,
+                Category = dp.Product.Category,
+                Images = dp.Product.Images.Select(img => img.ImageUrl).ToList(),
+
+                // معلومات الخصم
+                HasDiscount = true,
+                DiscountedPrice = CalculateFinalPrice(dp.Product.Price, dp.Discount.Type, dp.Discount.Value),
+                DiscountName = dp.Discount.Name,
+                DiscountValue = dp.Discount.Value,
+                DiscountType = dp.Discount.Type.ToString()
+            }).ToList();
+
+            return Ok(result);
+        }
+
+        // دالة مساعدة لحساب السعر بعد الخصم - تحويلها إلى static
+        private static decimal CalculateFinalPrice(decimal originalPrice, DiscountType discountType, decimal discountValue)
+        {
+            if (discountType == DiscountType.Percentage)
+            {
+                // في حالة الخصم بالنسبة المئوية
+                return Math.Round(originalPrice * (1 - (discountValue / 100)), 2);
+            }
+            else // DiscountType.Fixed
+            {
+                // في حالة الخصم بمبلغ ثابت
+                return Math.Max(0, Math.Round(originalPrice - discountValue, 2));
+            }
+        }
+
         [HttpGet("active")]
         [AllowAnonymous] // يسمح بالوصول العام للخصومات النشطة
         public async Task<ActionResult<IEnumerable<DiscountResponseDto>>> GetActiveDiscounts()

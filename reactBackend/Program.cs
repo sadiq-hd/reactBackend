@@ -20,8 +20,6 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<IOtpService, OtpService>();
 
-
-
 // تسجيل خدمة الصور
 builder.Services.AddScoped<IImageService, ImageService>();
 
@@ -42,11 +40,8 @@ builder.Services.AddDirectoryBrowser();
 
 builder.Services.AddScoped<IPurchaseVerificationService, PurchaseVerificationService>();
 
-
 // Configure DbContext
-var connectionString = builder.Environment.IsDevelopment()
-   ? builder.Configuration.GetConnectionString("LocalConnection")
-   : builder.Configuration.GetConnectionString("AzureConnection");
+var connectionString = builder.Configuration.GetConnectionString("LocalConnection");
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
@@ -88,16 +83,27 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 // Configure CORS
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowReactApp", 
-        builder =>
+    // سياسة تسمح بأي أصل - استخدمها للتشخيص
+    options.AddPolicy("AllowAll",
+        policy =>
         {
-            builder
-                .WithOrigins(
+            policy.AllowAnyOrigin()
+                  .AllowAnyHeader()
+                  .AllowAnyMethod();
+        });
+
+    // سياسة تسمح بأصول محددة ولكن مع AllowCredentials
+    options.AddPolicy("AllowSpecificOrigins",
+        policy =>
+        {
+            policy.WithOrigins(
                     "https://shuttercart.netlify.app",
                     "http://localhost:5173",
-                        "https://reactonlinestore-app-h5atcvhec8dcd0da.eastasia-01.azurewebsites.net"
-
-                                    )
+                    "http://localhost:5000",
+                    "http://localhost:3000",
+                    "https://localhost:5000",
+                    "https://reactonlinestore-app-h5atcvhec8dcd0da.eastasia-01.azurewebsites.net"
+                )
                 .AllowAnyHeader()
                 .AllowAnyMethod()
                 .AllowCredentials();
@@ -126,6 +132,8 @@ builder.Services.AddAuthentication(options =>
 });
 
 var app = builder.Build();
+
+// سيسمح بظهور رسائل الخطأ المفصلة
 app.UseDeveloperExceptionPage();
 
 // Configure Swagger
@@ -138,11 +146,6 @@ app.UseSwaggerUI(c =>
 
 // إضافة دعم الملفات الثابتة
 app.UseStaticFiles();
-
-if (app.Environment.IsDevelopment() || app.Environment.IsProduction()) // مؤقتًا للتشخيص
-{
-    app.UseDeveloperExceptionPage();
-}
 
 // تكوين مجلد الصور
 app.UseStaticFiles(new StaticFileOptions
@@ -182,21 +185,21 @@ app.Use(async (context, next) =>
         await context.Response.WriteAsJsonAsync(new
         {
             error = "An error occurred",
-            message = app.Environment.IsDevelopment() ? ex.Message : "Internal server error"
+            message = ex.Message // اظهار رسالة الخطأ للتشخيص
         });
     }
 });
 
-
-
-app.UseHttpsRedirection();
+// ترتيب مهم للـ Middleware
 app.UseRouting();
-app.UseCors("AllowReactApp");
+
+// استخدام CORS - استخدم AllowAll للتشخيص
+app.UseCors("AllowAll");
+
 app.UseAuthentication();
 app.UseAuthorization();
-app.MapControllers();
-app.UseDeveloperExceptionPage();
 
+app.MapControllers();
 
 // Ensure database is created and migrations are applied
 using (var scope = app.Services.CreateScope())
@@ -263,6 +266,8 @@ using (var scope = app.Services.CreateScope())
         logger.LogError(ex, "An error occurred while migrating the database.");
     }
 }
+
+// ضمان وجود مجلدات الرفع
 string wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
 if (!Directory.Exists(wwwrootPath))
 {
