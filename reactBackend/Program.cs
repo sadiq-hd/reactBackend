@@ -39,19 +39,30 @@ builder.Services.Configure<FormOptions>(options =>
 builder.Services.AddDirectoryBrowser();
 
 builder.Services.AddScoped<IPurchaseVerificationService, PurchaseVerificationService>();
+// تبسيط قراءة سلسلة الاتصال
+string connectionString = null;
 
-// Configure DbContext
-// var connectionString = builder.Environment.IsDevelopment()
-//    ? builder.Configuration.GetConnectionString("LocalConnection")
-//    : builder.Configuration.GetConnectionString("AzureConnection");
+// محاولة قراءة من DefaultConnection أولاً
+connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
+// إذا كانت فارغة، استخدم الاتصال المناسب للبيئة
+if (string.IsNullOrEmpty(connectionString))
+{
+    connectionString = builder.Environment.IsDevelopment()
+        ? builder.Configuration.GetConnectionString("LocalConnection")
+        : builder.Configuration.GetConnectionString("AzureConnection");
+}
 
-   var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
-   ?? (builder.Environment.IsDevelopment()
-      ? builder.Configuration.GetConnectionString("LocalConnection")
-      : builder.Configuration.GetConnectionString("AzureConnection"));
+// طباعة سلسلة الاتصال للتصحيح (بدون معلومات حساسة)
+Console.WriteLine($"Using Connection String Source: {(connectionString == builder.Configuration.GetConnectionString("DefaultConnection") ? "DefaultConnection" : (builder.Environment.IsDevelopment() ? "LocalConnection" : "AzureConnection"))}");
 
-// اعدادات المحلي
+// التحقق من أن سلسلة الاتصال ليست فارغة
+if (string.IsNullOrEmpty(connectionString))
+{
+    throw new InvalidOperationException("Connection string is null or empty. Please check your configuration.");
+}
+
+// اعدادات قاعدة البيانات
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
     options.UseSqlServer(connectionString, sqlOptions =>
@@ -62,7 +73,6 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
             errorNumbersToAdd: null);
     });
 });
-
 
 
 
