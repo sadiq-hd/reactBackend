@@ -39,40 +39,30 @@ builder.Services.Configure<FormOptions>(options =>
 builder.Services.AddDirectoryBrowser();
 
 builder.Services.AddScoped<IPurchaseVerificationService, PurchaseVerificationService>();
-// تبسيط قراءة سلسلة الاتصال
-string connectionString = null;
 
-// محاولة قراءة من DefaultConnection أولاً
-connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+// Configure DbContext
+// var connectionString = builder.Environment.IsDevelopment()
+//    ? builder.Configuration.GetConnectionString("LocalConnection")
+//    : builder.Configuration.GetConnectionString("AzureConnection");
 
-// إذا كانت فارغة، استخدم الاتصال المناسب للبيئة
-if (string.IsNullOrEmpty(connectionString))
-{
-    connectionString = builder.Environment.IsDevelopment()
-        ? builder.Configuration.GetConnectionString("LocalConnection")
-        : builder.Configuration.GetConnectionString("AzureConnection");
-}
 
-// طباعة سلسلة الاتصال للتصحيح (بدون معلومات حساسة)
-Console.WriteLine($"Using Connection String Source: {(connectionString == builder.Configuration.GetConnectionString("DefaultConnection") ? "DefaultConnection" : (builder.Environment.IsDevelopment() ? "LocalConnection" : "AzureConnection"))}");
+   var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
+   ?? (builder.Environment.IsDevelopment()
+      ? builder.Configuration.GetConnectionString("LocalConnection")
+      : builder.Configuration.GetConnectionString("AzureConnection"));
 
-// التحقق من أن سلسلة الاتصال ليست فارغة
-if (string.IsNullOrEmpty(connectionString))
-{
-    throw new InvalidOperationException("Connection string is null or empty. Please check your configuration.");
-}
+// اعدادات المحلي
+// builder.Services.AddDbContext<ApplicationDbContext>(options =>
+// {
+//     options.UseSqlServer(connectionString, sqlOptions =>
+//     {
+//         sqlOptions.EnableRetryOnFailure(
+//             maxRetryCount: 5,
+//             maxRetryDelay: TimeSpan.FromSeconds(30),
+//             errorNumbersToAdd: null);
+//     });
+// });
 
-// اعدادات قاعدة البيانات
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-{
-    options.UseSqlServer(connectionString, sqlOptions =>
-    {
-        sqlOptions.EnableRetryOnFailure(
-            maxRetryCount: 5,
-            maxRetryDelay: TimeSpan.FromSeconds(30),
-            errorNumbersToAdd: null);
-    });
-});
 
 
 
