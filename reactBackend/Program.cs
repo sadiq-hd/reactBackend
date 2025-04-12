@@ -52,16 +52,16 @@ builder.Services.AddScoped<IPurchaseVerificationService, PurchaseVerificationSer
       : builder.Configuration.GetConnectionString("AzureConnection"));
 
 // اعدادات المحلي
-// builder.Services.AddDbContext<ApplicationDbContext>(options =>
-// {
-//     options.UseSqlServer(connectionString, sqlOptions =>
-//     {
-//         sqlOptions.EnableRetryOnFailure(
-//             maxRetryCount: 5,
-//             maxRetryDelay: TimeSpan.FromSeconds(30),
-//             errorNumbersToAdd: null);
-//     });
-// });
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+{
+    options.UseSqlServer(connectionString, sqlOptions =>
+    {
+        sqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(30),
+            errorNumbersToAdd: null);
+    });
+});
 
 
 
