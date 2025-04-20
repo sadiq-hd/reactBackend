@@ -46,10 +46,23 @@ builder.Services.AddScoped<IPurchaseVerificationService, PurchaseVerificationSer
 //    : builder.Configuration.GetConnectionString("AzureConnection");
 
 
-   var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
-   ?? (builder.Environment.IsDevelopment()
-      ? builder.Configuration.GetConnectionString("LocalConnection")
-      : builder.Configuration.GetConnectionString("AzureConnection"));
+//    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
+//    ?? (builder.Environment.IsDevelopment()
+//       ? builder.Configuration.GetConnectionString("LocalConnection")
+//       : builder.Configuration.GetConnectionString("AzureConnection"));
+
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+{
+    options.UseSqlServer(connectionString, sqlOptions =>
+    {
+        sqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(30),
+            errorNumbersToAdd: null);
+    });
+});
 
 // اعدادات المحلي
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
