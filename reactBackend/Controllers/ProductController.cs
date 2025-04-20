@@ -91,6 +91,20 @@ namespace reactBackend.Controllers
             return CreatedAtAction(nameof(GetProduct), new { id = product.Id }, product);
         }
 
+        [HttpGet("test-connection")]
+public async Task<IActionResult> TestConnection()
+{
+    try
+    {
+        bool canConnect = await _context.Database.CanConnectAsync();
+        return Ok(new { connected = canConnect });
+    }
+    catch (Exception ex)
+    {
+        return StatusCode(500, new { error = ex.Message, stack = ex.StackTrace });
+    }
+}
+
         // POST: api/products/{id}/images
         [HttpPost("{id}/images")]
         [Authorize]
