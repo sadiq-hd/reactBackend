@@ -230,7 +230,7 @@ using (var scope = app.Services.CreateScope())
         var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
         var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
 
-        await context.Database.MigrateAsync();
+        // await context.Database.MigrateAsync();
 
         // إضافة الأدوار الأساسية
         if (!await roleManager.RoleExistsAsync("admin"))
@@ -281,6 +281,7 @@ using (var scope = app.Services.CreateScope())
     }
     catch (Exception ex)
     {
+
         var logger = services.GetRequiredService<ILogger<Program>>();
         logger.LogError(ex, "An error occurred while migrating the database.");
     }
