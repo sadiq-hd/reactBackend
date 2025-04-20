@@ -282,5 +282,19 @@ using (var scope = app.Services.CreateScope())
         logger.LogError(ex, "An error occurred while migrating the database.");
     }
 }
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (Exception ex)
+    {
+        var logger = app.Services.GetService<ILogger<Program>>();
+        logger.LogError(ex, "خطأ غير معالج: {Message}", ex.Message);
+        
+        throw; // إعادة رمي الاستثناء ليتم معالجته بواسطة middleware إدارة الأخطاء العام
+    }
+});
 
 app.Run();
