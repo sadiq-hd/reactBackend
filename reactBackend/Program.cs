@@ -24,7 +24,7 @@ builder.Services.AddSingleton<IOtpService, OtpService>();
 builder.Services.AddScoped<IImageService, ImageService>();
 
 // تسجيل خدمة DinkToPdf
-builder.Services.AddSingleton(typeof(IConverter), new SynchronizedConverter(new PdfTools()));
+// builder.Services.AddSingleton(typeof(IConverter), new SynchronizedConverter(new PdfTools()));
 
 // تسجيل خدمة معالجة الدفع
 builder.Services.AddScoped<IPaymentService, PaymentService>();
@@ -61,6 +61,9 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
             maxRetryCount: 5,
             maxRetryDelay: TimeSpan.FromSeconds(30),
             errorNumbersToAdd: null);
+        
+        // إضافة تكوين إضافي لتحسين الأداء مع Azure SQL
+        sqlOptions.CommandTimeout(30);
     });
 });
 
