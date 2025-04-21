@@ -131,7 +131,32 @@ try
             });
     });
 
-    // Configure Authentication
+    // ---- FIX: إصلاح JWT ----
+    // التحقق من وجود إعدادات JWT وتوفير قيم افتراضية إذا كانت مفقودة
+    var jwtKey = builder.Configuration.GetSection("JWT:Key").Value;
+    var jwtIssuer = builder.Configuration.GetSection("JWT:Issuer").Value;
+    var jwtAudience = builder.Configuration.GetSection("JWT:Audience").Value;
+
+    // توفير قيم افتراضية إذا كانت الإعدادات مفقودة
+    if (string.IsNullOrEmpty(jwtKey))
+    {
+        jwtKey = "mK8yP$9qL#nX2vR5tA7wE4hJ@cF3bN6dQ9wB8mH2pY5xK4jM7nF1vC6tZ3"; // مفتاح افتراضي قوي
+        logger.LogWarning("JWT:Key غير موجود في الإعدادات. تم استخدام قيمة افتراضية.");
+    }
+
+    if (string.IsNullOrEmpty(jwtIssuer))
+    {
+        jwtIssuer = "https://reactbackend-production.up.railway.app";
+        logger.LogWarning("JWT:Issuer غير موجود في الإعدادات. تم استخدام قيمة افتراضية.");
+    }
+
+    if (string.IsNullOrEmpty(jwtAudience))
+    {
+        jwtAudience = "https://reactbackend-production.up.railway.app";
+        logger.LogWarning("JWT:Audience غير موجود في الإعدادات. تم استخدام قيمة افتراضية.");
+    }
+
+    // Configure Authentication مع معالجة القيم المفقودة
     builder.Services.AddAuthentication(options =>
     {
         options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -142,12 +167,11 @@ try
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration.GetSection("JWT:Key").Value!)),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
             ValidateIssuer = true,
             ValidateAudience = true,
-            ValidIssuer = builder.Configuration.GetSection("JWT:Issuer").Value,
-            ValidAudience = builder.Configuration.GetSection("JWT:Audience").Value,
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
             ClockSkew = TimeSpan.Zero
         };
     });
