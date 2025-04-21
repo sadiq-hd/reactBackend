@@ -14,293 +14,361 @@ using System.IO;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to container
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-builder.Services.AddSingleton<IOtpService, OtpService>();
-
-// تسجيل خدمة الصور
-builder.Services.AddScoped<IImageService, ImageService>();
-
-// تسجيل خدمة DinkToPdf
-// builder.Services.AddSingleton(typeof(IConverter), new SynchronizedConverter(new PdfTools()));
-
-// تسجيل خدمة معالجة الدفع
-builder.Services.AddScoped<IPaymentService, PaymentService>();
-
-// تكوين حجم الملف الأقصى المسموح به للتحميل
-builder.Services.Configure<FormOptions>(options =>
-{
-    options.MultipartBodyLengthLimit = 2 * 1024 * 1024; // 2MB
-});
-
-// تكوين خدمة الملفات الثابتة
-builder.Services.AddDirectoryBrowser();
-
-builder.Services.AddScoped<IPurchaseVerificationService, PurchaseVerificationService>();
-
-// Configure DbContext
-// var connectionString = builder.Environment.IsDevelopment()
-//    ? builder.Configuration.GetConnectionString("LocalConnection")
-//    : builder.Configuration.GetConnectionString("AzureConnection");
-
-
-//    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
-//    ?? (builder.Environment.IsDevelopment()
-//       ? builder.Configuration.GetConnectionString("LocalConnection")
-//       : builder.Configuration.GetConnectionString("AzureConnection"));
-
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-{
-    options.UseSqlServer(connectionString, sqlOptions =>
-    {
-        sqlOptions.EnableRetryOnFailure(
-            maxRetryCount: 5,
-            maxRetryDelay: TimeSpan.FromSeconds(30),
-            errorNumbersToAdd: null);
-        
-        // إضافة تكوين إضافي لتحسين الأداء مع Azure SQL
-        sqlOptions.CommandTimeout(30);
-    });
-});
-
-
-
-
-
-
-// إضافة تسجيل لأخطاء الاتصال بقاعدة البيانات
+// إضافة تسجيل متقدم
+builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
-
-// Add Identity Services
-builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
+builder.Logging.Services.Configure<LoggerFilterOptions>(options =>
 {
-    // Password settings
-    options.Password.RequireDigit = true;
-    options.Password.RequireLowercase = true;
-    options.Password.RequireNonAlphanumeric = false; // تم التعديل للتسهيل
-    options.Password.RequireUppercase = false; // تم التعديل للتسهيل
-    options.Password.RequiredLength = 6;
-    options.Password.RequiredUniqueChars = 1;
-
-    // Lockout settings
-    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
-    options.Lockout.MaxFailedAccessAttempts = 5;
-    options.Lockout.AllowedForNewUsers = true;
-
-    // User settings
-    options.User.RequireUniqueEmail = true;
-})
-.AddEntityFrameworkStores<ApplicationDbContext>()
-.AddDefaultTokenProviders();
-
-// Configure CORS
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowReactApp", 
-        builder =>
-        {
-            builder
-                .WithOrigins(
-                    "https://shuttercart.netlify.app",
-                    "http://localhost:5173",
-                    "https://reactonlinestore-app-h5atcvhec8dcd0da.eastasia-01.azurewebsites.net",
-                    "https://reactbackend-production.up.railway.app"
-                )
-                .AllowAnyHeader()
-                .AllowAnyMethod()
-                .AllowCredentials();
-        });
+    options.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Information);
+    options.AddFilter("Microsoft.EntityFrameworkCore.Infrastructure", LogLevel.Information);
 });
 
-// Configure Authentication
-builder.Services.AddAuthentication(options =>
+var logger = LoggerFactory.Create(logging => 
 {
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
+    logging.AddConsole();
+    logging.AddDebug();
+    logging.SetMinimumLevel(LogLevel.Debug);
+}).CreateLogger("Program");
+
+logger.LogInformation("بدء تهيئة التطبيق");
+
+try
 {
-    options.TokenValidationParameters = new TokenValidationParameters
+    // Add services to container
+    builder.Services.AddControllers();
+    builder.Services.AddEndpointsApiExplorer();
+    builder.Services.AddSwaggerGen();
+    builder.Services.AddSingleton<IOtpService, OtpService>();
+
+    // تسجيل خدمة الصور
+    builder.Services.AddScoped<IImageService, ImageService>();
+
+    // تعطيل DinkToPdf تماماً
+    // وبدلاً من ذلك، استخدم استراتيجية أخرى مثل تعديل الوحدات التي تستخدمها
+    // أو تعديل الكود ليعمل بدون تحويل PDF
+    
+    // تسجيل خدمة معالجة الدفع
+    builder.Services.AddScoped<IPaymentService, PaymentService>();
+
+    // تكوين حجم الملف الأقصى المسموح به للتحميل
+    builder.Services.Configure<FormOptions>(options =>
     {
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(builder.Configuration.GetSection("JWT:Key").Value!)),
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidIssuer = builder.Configuration.GetSection("JWT:Issuer").Value,
-        ValidAudience = builder.Configuration.GetSection("JWT:Audience").Value,
-        ClockSkew = TimeSpan.Zero
-    };
-});
+        options.MultipartBodyLengthLimit = 2 * 1024 * 1024; // 2MB
+    });
 
-var app = builder.Build();
+    // تكوين خدمة الملفات الثابتة
+    builder.Services.AddDirectoryBrowser();
 
-// فحص وإنشاء المجلدات اللازمة
-string wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
-if (!Directory.Exists(wwwrootPath))
-{
-    Directory.CreateDirectory(wwwrootPath);
-}
+    builder.Services.AddScoped<IPurchaseVerificationService, PurchaseVerificationService>();
 
-string imagesPath = Path.Combine(wwwrootPath, "images");
-if (!Directory.Exists(imagesPath))
-{
-    Directory.CreateDirectory(imagesPath);
-}
-
-string invoicesPath = Path.Combine(wwwrootPath, "invoices");
-if (!Directory.Exists(invoicesPath))
-{
-    Directory.CreateDirectory(invoicesPath);
-}
-
-app.UseDeveloperExceptionPage();
-
-// Configure Swagger
-app.UseSwagger();
-app.UseSwaggerUI(c =>
-{
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "React Online Store API v1");
-    c.RoutePrefix = string.Empty;
-});
-
-// إضافة دعم الملفات الثابتة
-app.UseStaticFiles();
-
-if (app.Environment.IsDevelopment() || app.Environment.IsProduction()) // مؤقتًا للتشخيص
-{
-    app.UseDeveloperExceptionPage();
-}
-
-// تكوين مجلد الصور
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider(imagesPath),
-    RequestPath = "/images"
-});
-
-// تكوين مجلد الفواتير
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider(invoicesPath),
-    RequestPath = "/invoices"
-});
-
-// Basic health check endpoint
-app.MapGet("/health", () => Results.Ok("API is running!"));
-
-// Global error handling
-app.Use(async (context, next) =>
-{
-    try
+    // الحصول على سلسلة الاتصال
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    if (connectionString != null)
     {
-        await next();
+        logger.LogInformation($"سلسلة الاتصال: {connectionString.Substring(0, Math.Min(30, connectionString.Length))}...");
     }
-    catch (Exception ex)
+    else
     {
-        context.Response.StatusCode = 500;
-        await context.Response.WriteAsJsonAsync(new
-        {
-            error = "An error occurred",
-            message = app.Environment.IsDevelopment() ? ex.Message : "Internal server error"
-        });
+        logger.LogWarning("سلسلة الاتصال غير محددة!");
     }
-});
 
-app.UseHttpsRedirection();
-app.UseRouting();
-app.UseCors("AllowReactApp");
-app.UseAuthentication();
-app.UseAuthorization();
-app.MapControllers();
-app.UseDeveloperExceptionPage();
-
-// Ensure database is created and migrations are applied
-using (var scope = app.Services.CreateScope())
-{
-    var services = scope.ServiceProvider;
-    try
+    builder.Services.AddDbContext<ApplicationDbContext>(options =>
     {
-        var context = services.GetRequiredService<ApplicationDbContext>();
-        var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
-        var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
-
-        // await context.Database.MigrateAsync();
-
-        // إضافة الأدوار الأساسية
-        if (!await roleManager.RoleExistsAsync("admin"))
-            await roleManager.CreateAsync(new IdentityRole("admin"));
-
-        if (!await roleManager.RoleExistsAsync("user"))
-            await roleManager.CreateAsync(new IdentityRole("user"));
-
-        // إضافة حساب المدير التجريبي
-        if (!await userManager.Users.AnyAsync(u => u.Email == "admin@example.com"))
+        if (connectionString != null)
         {
-            var adminUser = new ApplicationUser
+            options.UseSqlServer(connectionString, sqlOptions =>
             {
-                UserName = "admin",
-                Email = "admin@example.com",
-                Name = "المدير",
-                PhoneNumber = "0553065029",
-                EmailConfirmed = true,
-                PhoneNumberConfirmed = true
-            };
-
-            var result = await userManager.CreateAsync(adminUser, "admin123");
-            if (result.Succeeded)
-            {
-                await userManager.AddToRoleAsync(adminUser, "admin");
-            }
+                sqlOptions.EnableRetryOnFailure(
+                    maxRetryCount: 5,
+                    maxRetryDelay: TimeSpan.FromSeconds(30),
+                    errorNumbersToAdd: null);
+                
+                sqlOptions.CommandTimeout(30);
+            });
         }
-
-        // إضافة حساب المستخدم التجريبي
-        if (!await userManager.Users.AnyAsync(u => u.Email == "user@example.com"))
+        else
         {
-            var normalUser = new ApplicationUser
-            {
-                UserName = "user",
-                Email = "user@example.com",
-                Name = "مستخدم",
-                PhoneNumber = "0553065028",
-                EmailConfirmed = true,
-                PhoneNumberConfirmed = true
-            };
-
-            var result = await userManager.CreateAsync(normalUser, "user123");
-            if (result.Succeeded)
-            {
-                await userManager.AddToRoleAsync(normalUser, "user");
-            }
+            logger.LogError("لا يمكن تكوين سياق قاعدة البيانات بدون سلسلة اتصال صالحة");
         }
-    }
-    catch (Exception ex)
+    });
+
+    // Add Identity Services
+    builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     {
+        options.Password.RequireDigit = true;
+        options.Password.RequireLowercase = true;
+        options.Password.RequireNonAlphanumeric = false;
+        options.Password.RequireUppercase = false;
+        options.Password.RequiredLength = 6;
+        options.Password.RequiredUniqueChars = 1;
 
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred while migrating the database.");
-    }
-}
+        options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
+        options.Lockout.MaxFailedAccessAttempts = 5;
+        options.Lockout.AllowedForNewUsers = true;
 
-//delete
-app.Use(async (context, next) =>
-{
+        options.User.RequireUniqueEmail = true;
+    })
+    .AddEntityFrameworkStores<ApplicationDbContext>()
+    .AddDefaultTokenProviders();
+
+    // Configure CORS
+    builder.Services.AddCors(options =>
+    {
+        options.AddPolicy("AllowReactApp", 
+            builder =>
+            {
+                builder
+                    .WithOrigins(
+                        "https://shuttercart.netlify.app",
+                        "http://localhost:5173",
+                        "https://reactonlinestore-app-h5atcvhec8dcd0da.eastasia-01.azurewebsites.net",
+                        "https://reactbackend-production.up.railway.app"
+                    )
+                    .AllowAnyHeader()
+                    .AllowAnyMethod()
+                    .AllowCredentials();
+            });
+    });
+
+    // Configure Authentication
+    builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(builder.Configuration.GetSection("JWT:Key").Value!)),
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidIssuer = builder.Configuration.GetSection("JWT:Issuer").Value,
+            ValidAudience = builder.Configuration.GetSection("JWT:Audience").Value,
+            ClockSkew = TimeSpan.Zero
+        };
+    });
+
+    var app = builder.Build();
+
+    // إضافة نقطة نهاية اختبار مباشرة (بدون وحدة تحكم)
+    app.MapGet("/api/test", () => 
+    {
+        logger.LogInformation("تم الوصول إلى نقطة نهاية الاختبار");
+        return Results.Ok(new { message = "API is working!", timestamp = DateTime.UtcNow });
+    });
+
+    // فحص وإنشاء المجلدات اللازمة بمعالجة أخطاء أفضل
     try
     {
-        await next();
-    }
-    catch (Exception ex)
-    {
-        var logger = app.Services.GetService<ILogger<Program>>();
-        logger.LogError(ex, "خطأ غير معالج: {Message}", ex.Message);
+        string wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
+        logger.LogInformation($"مسار wwwroot: {wwwrootPath}");
         
-        throw; // إعادة رمي الاستثناء ليتم معالجته بواسطة middleware إدارة الأخطاء العام
-    }
-});
+        if (!Directory.Exists(wwwrootPath))
+        {
+            Directory.CreateDirectory(wwwrootPath);
+            logger.LogInformation("تم إنشاء مجلد wwwroot");
+        }
 
-app.Run();
+        string imagesPath = Path.Combine(wwwrootPath, "images");
+        if (!Directory.Exists(imagesPath))
+        {
+            Directory.CreateDirectory(imagesPath);
+            logger.LogInformation("تم إنشاء مجلد الصور");
+        }
+
+        string invoicesPath = Path.Combine(wwwrootPath, "invoices");
+        if (!Directory.Exists(invoicesPath))
+        {
+            Directory.CreateDirectory(invoicesPath);
+            logger.LogInformation("تم إنشاء مجلد الفواتير");
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "حدث خطأ أثناء إنشاء المجلدات ولكن سيستمر التطبيق");
+    }
+
+    app.UseDeveloperExceptionPage();
+
+    // Configure Swagger
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "React Online Store API v1");
+        c.RoutePrefix = string.Empty;
+    });
+
+    // إضافة دعم الملفات الثابتة بمعالجة أخطاء أفضل
+    try 
+    {
+        app.UseStaticFiles();
+
+        // تكوين مجلد الصور
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "wwwroot", "images")),
+            RequestPath = "/images"
+        });
+
+        // تكوين مجلد الفواتير
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "wwwroot", "invoices")),
+            RequestPath = "/invoices"
+        });
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "حدث خطأ أثناء تكوين الملفات الثابتة ولكن سيستمر التطبيق");
+    }
+
+    // Basic health check endpoint
+    app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestamp = DateTime.UtcNow }));
+
+    // معالجة أخطاء محسنة - تسجيل الأخطاء مع تفاصيل أكثر
+    app.Use(async (context, next) =>
+    {
+        try
+        {
+            await next();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "خطأ غير معالج: {Path}", context.Request.Path);
+            
+            context.Response.StatusCode = 500;
+            context.Response.ContentType = "application/json";
+            
+            var exceptionDetails = new
+            {
+                error = "An error occurred",
+                message = app.Environment.IsDevelopment() ? ex.Message : "Internal server error",
+                path = context.Request.Path,
+                timestamp = DateTime.UtcNow
+            };
+            
+            await context.Response.WriteAsJsonAsync(exceptionDetails);
+        }
+    });
+
+    app.UseHttpsRedirection();
+    app.UseRouting();
+    app.UseCors("AllowReactApp");
+    app.UseAuthentication();
+    app.UseAuthorization();
+    app.MapControllers();
+
+    // تعديل: محاولة تهيئة قاعدة البيانات مع معالجة أفضل للأخطاء
+    using (var scope = app.Services.CreateScope())
+    {
+        var services = scope.ServiceProvider;
+        logger.LogInformation("محاولة اختبار الاتصال بقاعدة البيانات");
+        
+        try
+        {
+            var context = services.GetRequiredService<ApplicationDbContext>();
+            
+            // اختبار الاتصال بقاعدة البيانات فقط
+            var canConnect = await context.Database.CanConnectAsync();
+            logger.LogInformation($"يمكن الاتصال بقاعدة البيانات: {canConnect}");
+            
+            if (canConnect)
+            {
+                logger.LogInformation("محاولة تهيئة المستخدمين والأدوار");
+                var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
+                var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
+
+                // إضافة الأدوار الأساسية
+                if (!await roleManager.RoleExistsAsync("admin"))
+                {
+                    logger.LogInformation("إنشاء دور المدير");
+                    await roleManager.CreateAsync(new IdentityRole("admin"));
+                }
+
+                if (!await roleManager.RoleExistsAsync("user"))
+                {
+                    logger.LogInformation("إنشاء دور المستخدم");
+                    await roleManager.CreateAsync(new IdentityRole("user"));
+                }
+
+                // إضافة حساب المدير التجريبي
+                if (!await userManager.Users.AnyAsync(u => u.Email == "admin@example.com"))
+                {
+                    logger.LogInformation("إنشاء حساب المدير التجريبي");
+                    var adminUser = new ApplicationUser
+                    {
+                        UserName = "admin",
+                        Email = "admin@example.com",
+                        Name = "المدير",
+                        PhoneNumber = "0553065029",
+                        EmailConfirmed = true,
+                        PhoneNumberConfirmed = true
+                    };
+
+                    var result = await userManager.CreateAsync(adminUser, "admin123");
+                    if (result.Succeeded)
+                    {
+                        logger.LogInformation("إضافة دور المدير للمستخدم");
+                        await userManager.AddToRoleAsync(adminUser, "admin");
+                    }
+                    else
+                    {
+                        foreach (var error in result.Errors)
+                        {
+                            logger.LogWarning("خطأ في إنشاء المدير: {Code} - {Description}", error.Code, error.Description);
+                        }
+                    }
+                }
+
+                // إضافة حساب المستخدم التجريبي
+                if (!await userManager.Users.AnyAsync(u => u.Email == "user@example.com"))
+                {
+                    logger.LogInformation("إنشاء حساب المستخدم التجريبي");
+                    var normalUser = new ApplicationUser
+                    {
+                        UserName = "user",
+                        Email = "user@example.com",
+                        Name = "مستخدم",
+                        PhoneNumber = "0553065028",
+                        EmailConfirmed = true,
+                        PhoneNumberConfirmed = true
+                    };
+
+                    var result = await userManager.CreateAsync(normalUser, "user123");
+                    if (result.Succeeded)
+                    {
+                        logger.LogInformation("إضافة دور المستخدم");
+                        await userManager.AddToRoleAsync(normalUser, "user");
+                    }
+                    else
+                    {
+                        foreach (var error in result.Errors)
+                        {
+                            logger.LogWarning("خطأ في إنشاء المستخدم: {Code} - {Description}", error.Code, error.Description);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                logger.LogWarning("لا يمكن الاتصال بقاعدة البيانات، تخطي تهيئة المستخدمين");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "حدث خطأ أثناء تهيئة قاعدة البيانات");
+        }
+    }
+
+    logger.LogInformation("بدء تشغيل التطبيق");
+    app.Run();
+}
+catch (Exception ex)
+{
+    logger.LogCritical(ex, "حدث خطأ كارثي أثناء بدء التشغيل");
+    throw;
+}
