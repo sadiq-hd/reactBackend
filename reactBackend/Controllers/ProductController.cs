@@ -635,21 +635,46 @@ public async Task<IActionResult> TestConnection()
             }
         }
 
-        [HttpGet("verify-images")]
-        public IActionResult VerifyImages()
+      [HttpGet("verify-images")]
+public IActionResult VerifyImages()
+{
+    try {
+        var imagesPath = Path.Combine(_environment.WebRootPath, "images");
+        var exists = Directory.Exists(imagesPath);
+    var files = new List<string>();
+    try
+    {
+        files = Directory.GetFiles(imagesPath).Select(Path.GetFileName).ToList();
+    }
+    catch (Exception ex)
+    {
+        return StatusCode(500, new
         {
-            var imagesPath = Path.Combine(_environment.WebRootPath, "images");
-            var exists = Directory.Exists(imagesPath);
-            var files = exists ? Directory.GetFiles(imagesPath).Select(Path.GetFileName).ToList() : new List<string>();
+            error = "Failed to list files in images directory",
+            message = ex.Message,
+            webRootPath = _environment.WebRootPath
+        });
+    }
 
-            return Ok(new
-            {
-                imagesPathExists = exists,
-                imagesCount = files.Count,
-                sampleImages = files.Take(5).ToList(),
-                webRootPath = _environment.WebRootPath
-            });
-        }
+    // Return detailed info about the directory
+    return Ok(new
+    {
+        imagesPathExists = Directory.Exists(imagesPath),
+        imagesPath = imagesPath,
+        imagesCount = files.Count,
+        sampleImages = files.Take(5).ToList(),
+        webRootPath = _environment.WebRootPath,
+        environmentName = _environment.EnvironmentName
+    });
+} catch (Exception ex) {
+        // Return detailed error for debugging
+        return StatusCode(500, new {
+            error = "An error occurred while verifying images",
+            message = ex.Message,
+            stackTrace = ex.StackTrace
+        });
+    }
+}
 
         // DELETE: api/products/5
         [HttpDelete("{id}")]
