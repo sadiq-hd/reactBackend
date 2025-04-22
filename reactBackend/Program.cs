@@ -227,28 +227,40 @@ try
     });
 
     // إضافة دعم الملفات الثابتة بمعالجة أخطاء أفضل
-    try 
-    {
-        app.UseStaticFiles();
+  try
+{
+    app.UseStaticFiles();
 
-        // تكوين مجلد الصور
-        app.UseStaticFiles(new StaticFileOptions
-        {
-            FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "wwwroot", "images")),
-            RequestPath = "/images"
-        });
-
-        // تكوين مجلد الفواتير
-        app.UseStaticFiles(new StaticFileOptions
-        {
-            FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "wwwroot", "invoices")),
-            RequestPath = "/invoices"
-        });
-    }
-    catch (Exception ex)
+    // تكوين مجلد الصور مع إضافة رؤوس CORS
+    app.UseStaticFiles(new StaticFileOptions
     {
-        logger.LogWarning(ex, "حدث خطأ أثناء تكوين الملفات الثابتة ولكن سيستمر التطبيق");
-    }
+        FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "wwwroot", "images")),
+        RequestPath = "/images",
+        OnPrepareResponse = ctx =>
+        {
+            // إضافة رؤوس CORS للسماح بالوصول من أي مصدر
+            ctx.Context.Response.Headers.Append("Access-Control-Allow-Origin", "*");
+            // إضافة التخزين المؤقت لتحسين الأداء
+            ctx.Context.Response.Headers.Append("Cache-Control", "public,max-age=86400");
+        }
+    });
+
+    // تكوين مجلد الفواتير مع إضافة رؤوس CORS أيضًا
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "wwwroot", "invoices")),
+        RequestPath = "/invoices",
+        OnPrepareResponse = ctx =>
+        {
+            ctx.Context.Response.Headers.Append("Access-Control-Allow-Origin", "*");
+            ctx.Context.Response.Headers.Append("Cache-Control", "public,max-age=86400");
+        }
+    });
+}
+catch (Exception ex)
+{
+    logger.LogWarning(ex, "حدث خطأ أثناء تكوين الملفات الثابتة ولكن سيستمر التطبيق");
+}
 
     // Basic health check endpoint
     app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestamp = DateTime.UtcNow }));
