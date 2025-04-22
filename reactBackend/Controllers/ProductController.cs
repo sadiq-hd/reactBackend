@@ -635,6 +635,22 @@ public async Task<IActionResult> TestConnection()
             }
         }
 
+        [HttpGet("verify-images")]
+        public IActionResult VerifyImages()
+        {
+            var imagesPath = Path.Combine(_environment.WebRootPath, "images");
+            var exists = Directory.Exists(imagesPath);
+            var files = exists ? Directory.GetFiles(imagesPath).Select(Path.GetFileName).ToList() : new List<string>();
+
+            return Ok(new
+            {
+                imagesPathExists = exists,
+                imagesCount = files.Count,
+                sampleImages = files.Take(5).ToList(),
+                webRootPath = _environment.WebRootPath
+            });
+        }
+
         // DELETE: api/products/5
         [HttpDelete("{id}")]
         [Authorize]
