@@ -121,11 +121,12 @@ try
                 builder
                     .WithOrigins(
                         "https://shuttercart.netlify.app",
-                        "http://localhost:5173",
-                    "http://localhost:5000",
+                        "http://localhost:5173",  
+                      "http://localhost:5000",
                     "http://localhost:3000",
-                    "https://localhost:5000",
-                    "https://reactonlinestore-app-h5atcvhec8dcd0da.eastasia-01.azurewebsites.net"
+                    "https://localhost:5000",                     
+                  "https://reactonlinestore-app-h5atcvhec8dcd0da.eastasia-01.azurewebsites.net",
+                        "https://reactbackend-production.up.railway.app"
                     )
                     .AllowAnyHeader()
                     .AllowAnyMethod()
