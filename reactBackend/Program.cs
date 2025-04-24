@@ -149,13 +149,13 @@ try
 
     if (string.IsNullOrEmpty(jwtIssuer))
     {
-        jwtIssuer = "https://reactbackend-production.up.railway.app";
+        jwtIssuer = "https://reactonlinestore-eebshvegccajfmfh.eastasia-01.azurewebsites.net";
         logger.LogWarning("JWT:Issuer غير موجود في الإعدادات. تم استخدام قيمة افتراضية.");
     }
 
     if (string.IsNullOrEmpty(jwtAudience))
     {
-        jwtAudience = "https://reactbackend-production.up.railway.app";
+        jwtAudience = "https://reactonlinestore-eebshvegccajfmfh.eastasia-01.azurewebsites.net";
         logger.LogWarning("JWT:Audience غير موجود في الإعدادات. تم استخدام قيمة افتراضية.");
     }
 
