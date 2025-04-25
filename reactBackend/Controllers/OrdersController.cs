@@ -3,8 +3,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using System.Text;
-using DinkToPdf;
-using DinkToPdf.Contracts;
+// تغيير استيرادات PDF
+// using DinkToPdf;
+// using DinkToPdf.Contracts;
 using reactBackend.Data;
 using reactBackend.Models;
 using reactBackend.Models.Enums;
@@ -21,25 +22,26 @@ namespace reactBackend.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly ILogger<OrdersController> _logger;
-        private readonly IConverter _pdfConverter;
         private readonly IWebHostEnvironment _environment;
         private readonly IPaymentService _paymentService;
+        private readonly IPdfService _pdfService;
+
 
         
 
-        public OrdersController(
-            ApplicationDbContext context,
-            ILogger<OrdersController> logger,
-            IConverter pdfConverter,
-            IWebHostEnvironment environment,
-            IPaymentService paymentService)
-        {
-            _context = context;
-            _logger = logger;
-            _pdfConverter = pdfConverter;
-            _environment = environment;
-            _paymentService = paymentService;
-        }
+       public OrdersController(
+    ApplicationDbContext context,
+    ILogger<OrdersController> logger,
+    IPdfService pdfService,
+    IWebHostEnvironment environment,
+    IPaymentService paymentService)
+{
+    _context = context;
+    _logger = logger;
+    _pdfService = pdfService;
+    _environment = environment;
+    _paymentService = paymentService;
+}
 
         [HttpPost]
         public async Task<ActionResult<OrderResponseDto>> CreateOrder([FromBody] CreateOrderDto dto)
@@ -284,15 +286,12 @@ namespace reactBackend.Controllers
                     }
 
                     // 12. إنشاء الفاتورة
-                    try
-                    {
-                        await GenerateInvoiceForOrder(order);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError($"Failed to generate invoice for order {order.Id}: {ex.Message}");
-                        // لا نريد إيقاف العملية إذا فشل إنشاء الفاتورة
-                    }
+try {
+    await GenerateInvoiceForOrder(order);
+} catch (Exception ex) {
+    _logger.LogError($"Failed to generate invoice for order {order.Id}: {ex.Message}");
+    // استمر بالعملية حتى مع فشل إنشاء الفاتورة
+}
 
                     // 13. حذف عناصر السلة
                     _context.CartItems.RemoveRange(cartItems);
@@ -996,129 +995,73 @@ namespace reactBackend.Controllers
             }
         }
 
-   private async Task GenerateInvoiceForOrder(Order order)
-{
-    string mainInvoiceFileName = string.Empty;
-    string mainInvoicePath = string.Empty;
-    string mainInvoiceDirectory = string.Empty;
-    byte[] pdfBytes = null;
-    
-    try
-    {
-        // التحقق مما إذا كان المحول متاحًا
-        if (_pdfConverter == null)
+         private async Task GenerateInvoiceForOrder(Order order)
         {
-            _logger.LogWarning($"محول PDF غير متاح لإنشاء فاتورة الطلب {order.Id}");
+            string mainInvoiceFileName = string.Empty;
+            string mainInvoicePath = string.Empty;
+            string mainInvoiceDirectory = string.Empty;
             
-            // إنشاء اسم ملف للفاتورة ولكن بدون محتوى حقيقي
-            mainInvoiceFileName = $"Invoice-{order.Id}-{DateTime.Now:yyyyMMddHHmmss}.pdf";
-            mainInvoicePath = Path.Combine("invoices", mainInvoiceFileName).Replace("\\", "/");
-            
-            // إذا كان المحول الوهمي متاحًا، استخدمه لإنشاء ملف وهمي
-            var dummyPdfConverter = HttpContext.RequestServices.GetService<DummyPdfConverter>();
-            if (dummyPdfConverter != null)
+            try
             {
-                mainInvoiceDirectory = Path.Combine(_environment.WebRootPath, "invoices");
-                Directory.CreateDirectory(mainInvoiceDirectory);
+                _logger.LogInformation($"بدء إنشاء فاتورة للطلب {order.Id}");
                 
-                string fullPath = Path.Combine(mainInvoiceDirectory, mainInvoiceFileName);
-                byte[] dummyPdfBytes = dummyPdfConverter.GenerateDummyPdf($"Order-{order.Id}");
-                await System.IO.File.WriteAllBytesAsync(fullPath, dummyPdfBytes);
-            }
-            
-            // تحديث مسار الفاتورة في الطلب
-            order.InvoicePath = mainInvoicePath;
-            _context.Orders.Update(order);
-            await _context.SaveChangesAsync();
-            return;
-        }
-        
-        // السلوك العادي لإنشاء PDF إذا كان المحول متاحًا
-        string htmlContent = GenerateInvoiceHtml(order);
-
-        var globalSettings = new GlobalSettings
-        {
-            ColorMode = ColorMode.Color,
-            Orientation = Orientation.Portrait,
-            PaperSize = PaperKind.A4,
-            Margins = new MarginSettings { Top = 10, Bottom = 10, Left = 10, Right = 10 },
-            DocumentTitle = $"Invoice-{order.Id}"
-        };
-
-        var objectSettings = new ObjectSettings
-        {
-            PagesCount = true,
-            HtmlContent = htmlContent,
-            WebSettings = { DefaultEncoding = "utf-8" },
-            HeaderSettings = new HeaderSettings
-            {
-                FontName = "Arial",
-                FontSize = 9,
-                Right = "Page [page] of [toPage]",
-                Left = $"رقم الطلب: {order.Id}",
-                Line = true
-            },
-            FooterSettings = new FooterSettings
-            {
-                FontName = "Arial",
-                FontSize = 9,
-                Line = true,
-                Center = $"© {DateTime.Now.Year} Sadiq Aldubaisi  متجرنا"
-            }
-        };
-
-        var pdf = new HtmlToPdfDocument()
-        {
-            GlobalSettings = globalSettings,
-            Objects = { objectSettings }
-        };
-
-        pdfBytes = _pdfConverter.Convert(pdf);
-
-        mainInvoiceDirectory = Path.Combine(_environment.WebRootPath, "invoices");
-        Directory.CreateDirectory(mainInvoiceDirectory);
-
-        mainInvoiceFileName = $"Invoice-{order.Id}-{DateTime.Now:yyyyMMddHHmmss}.pdf";
-        string fullInvoicePath = Path.Combine(mainInvoiceDirectory, mainInvoiceFileName);
-
-        await System.IO.File.WriteAllBytesAsync(fullInvoicePath, pdfBytes);
-
-        mainInvoicePath = Path.Combine("invoices", mainInvoiceFileName).Replace("\\", "/");
-        order.InvoicePath = mainInvoicePath;
-        _context.Orders.Update(order);
-        await _context.SaveChangesAsync();
-    }
-    catch (Exception ex)
-    {
-        _logger.LogError($"Error generating invoice for order {order.Id}: {ex.Message}");
-        _logger.LogError(ex.StackTrace);
-        
-        // في حالة حدوث خطأ، نحاول على الأقل تعيين مسار الفاتورة
-        try
-        {
-            if (string.IsNullOrEmpty(mainInvoiceFileName))
-            {
+                // إنشاء محتوى HTML للفاتورة
+                string htmlContent = GenerateInvoiceHtml(order);
+                
+                // إنشاء اسم ملف الفاتورة
                 mainInvoiceFileName = $"Invoice-{order.Id}-{DateTime.Now:yyyyMMddHHmmss}.pdf";
-            }
-            
-            if (string.IsNullOrEmpty(mainInvoicePath))
-            {
+                mainInvoiceDirectory = Path.Combine(_environment.WebRootPath, "invoices");
+                
+                // التأكد من وجود المجلد
+                if (!Directory.Exists(mainInvoiceDirectory))
+                {
+                    Directory.CreateDirectory(mainInvoiceDirectory);
+                }
+                
+                string fullInvoicePath = Path.Combine(mainInvoiceDirectory, mainInvoiceFileName);
+                
+                // إنشاء وحفظ ملف PDF
+                await _pdfService.SavePdfAsync(htmlContent, fullInvoicePath, $"فاتورة طلب رقم {order.Id}");
+                
+                // تحديث مسار الفاتورة في الطلب
                 mainInvoicePath = Path.Combine("invoices", mainInvoiceFileName).Replace("\\", "/");
+                order.InvoicePath = mainInvoicePath;
+                _context.Orders.Update(order);
+                await _context.SaveChangesAsync();
+                
+                _logger.LogInformation($"تم إنشاء فاتورة بنجاح للطلب {order.Id}");
             }
-            
-            order.InvoicePath = mainInvoicePath;
-            _context.Orders.Update(order);
-            await _context.SaveChangesAsync();
+            catch (Exception ex)
+            {
+                _logger.LogError($"خطأ في إنشاء فاتورة للطلب {order.Id}: {ex.Message}");
+                _logger.LogError(ex.StackTrace);
+                
+                // في حالة حدوث خطأ، نحاول على الأقل تعيين مسار الفاتورة
+                try
+                {
+                    if (string.IsNullOrEmpty(mainInvoiceFileName))
+                    {
+                        mainInvoiceFileName = $"Invoice-{order.Id}-{DateTime.Now:yyyyMMddHHmmss}.pdf";
+                    }
+                    
+                    if (string.IsNullOrEmpty(mainInvoicePath))
+                    {
+                        mainInvoicePath = Path.Combine("invoices", mainInvoiceFileName).Replace("\\", "/");
+                    }
+                    
+                    order.InvoicePath = mainInvoicePath;
+                    _context.Orders.Update(order);
+                    await _context.SaveChangesAsync();
+                }
+                catch (Exception innerEx)
+                {
+                    // إذا فشل أيضًا، نتجاهل الخطأ ولكن نسجله
+                    _logger.LogError(innerEx, "فشل أيضًا في تعيين مسار الفاتورة للطلب");
+                }
+            }
         }
-        catch (Exception innerEx)
-        {
-            // إذا فشل أيضًا، نتجاهل الخطأ ولكن نسجله
-            _logger.LogError(innerEx, "فشل أيضًا في تعيين مسار الفاتورة للطلب");
-        }
-    }
-}
 
-        [HttpGet("{id}/invoice")]
+         [HttpGet("{id}/invoice")]
         [Authorize]
         public async Task<IActionResult> GetInvoice(int id)
         {
@@ -1151,54 +1094,17 @@ namespace reactBackend.Controllers
 
                 // إنشاء الفاتورة مباشرة
                 string htmlContent = GenerateInvoiceHtml(order);
-
-                var globalSettings = new GlobalSettings
-                {
-                    ColorMode = ColorMode.Color,
-                    Orientation = Orientation.Portrait,
-                    PaperSize = PaperKind.A4,
-                    Margins = new MarginSettings { Top = 10, Bottom = 10, Left = 10, Right = 10 },
-                    DocumentTitle = $"Invoice-{order.Id}"
-                };
-
-                var objectSettings = new ObjectSettings
-                {
-                    PagesCount = true,
-                    HtmlContent = htmlContent,
-                    WebSettings = { DefaultEncoding = "utf-8" },
-                    HeaderSettings = new HeaderSettings
-                    {
-                        FontName = "Arial",
-                        FontSize = 9,
-                        Right = "Page [page] of [toPage]",
-                        Left = $"رقم الطلب: {order.Id}",
-                        Line = true
-                    },
-                    FooterSettings = new FooterSettings
-                    {
-                        FontName = "Arial",
-                        FontSize = 9,
-                        Line = true,
-                        Center = $"© {DateTime.Now.Year} Sadiq Aldubaisi  متجرنا"
-                    }
-                };
-
-                var pdf = new HtmlToPdfDocument()
-                {
-                    GlobalSettings = globalSettings,
-                    Objects = { objectSettings }
-                };
-
-                // تحويل HTML إلى PDF
+                
+                // استخدام خدمة PDF الجديدة لإنشاء PDF
                 byte[] pdfBytes;
                 try
                 {
-                    pdfBytes = _pdfConverter.Convert(pdf);
-                    _logger.LogInformation($"Invoice for order {order.Id} generated successfully");
+                    pdfBytes = _pdfService.GeneratePdf(htmlContent, $"فاتورة طلب رقم {order.Id}");
+                    _logger.LogInformation($"تم إنشاء فاتورة للطلب {order.Id} بنجاح");
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError($"Error converting HTML to PDF: {ex.Message}");
+                    _logger.LogError($"خطأ في تحويل HTML إلى PDF: {ex.Message}");
                     return Problem(
                         statusCode: 500,
                         title: "خطأ في النظام",
@@ -1211,7 +1117,7 @@ namespace reactBackend.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generating invoice for order {OrderId}", id);
+                _logger.LogError(ex, "خطأ في إنشاء فاتورة للطلب {OrderId}", id);
                 return Problem(
                     statusCode: 500,
                     title: "خطأ في النظام",

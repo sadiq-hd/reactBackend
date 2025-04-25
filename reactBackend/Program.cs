@@ -8,14 +8,7 @@ using reactBackend.Data;
 using reactBackend.Models;
 using reactBackend.Services;
 using System.Text;
-using DinkToPdf;
-using DinkToPdf.Contracts;
 using System.IO;
-using System.Runtime.Loader;
-using System.Runtime.InteropServices;
-
-// انقل فئة CustomAssemblyLoadContext إلى ملف منفصل في مجلد Services
-// ثم قم باستيرادها من هناك
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,7 +22,7 @@ builder.Logging.Services.Configure<LoggerFilterOptions>(options =>
     options.AddFilter("Microsoft.EntityFrameworkCore.Infrastructure", LogLevel.Information);
 });
 
-var logger = LoggerFactory.Create(logging => 
+var logger = LoggerFactory.Create(logging =>
 {
     logging.AddConsole();
     logging.AddDebug();
@@ -49,47 +42,13 @@ try
     // تسجيل خدمة الصور
     builder.Services.AddScoped<IImageService, ImageService>();
 
-    try
-    {
-        // استخدام CustomAssemblyLoadContext من مجلد Services
-        var context = new CustomAssemblyLoadContext();
-        string wkhtmltopdfPath = "";
-        
-        // تحديد مسار المكتبة بناءً على نظام التشغيل
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            wkhtmltopdfPath = Path.Combine(builder.Environment.ContentRootPath, "libwkhtmltox.dll");
-        } 
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-        {
-            wkhtmltopdfPath = Path.Combine(builder.Environment.ContentRootPath, "libwkhtmltox.so");
-        }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-        {
-            wkhtmltopdfPath = Path.Combine(builder.Environment.ContentRootPath, "libwkhtmltox.dylib");
-        }
-        
-        // التحقق من وجود المكتبة
-        if (!string.IsNullOrEmpty(wkhtmltopdfPath) && File.Exists(wkhtmltopdfPath))
-        {
-            context.LoadUnmanagedLibrary(wkhtmltopdfPath);
-            builder.Services.AddSingleton(typeof(IConverter), new SynchronizedConverter(new PdfTools()));
-            logger.LogInformation($"تم تسجيل DinkToPdf بنجاح من المسار: {wkhtmltopdfPath}");
-        }
-        else
-        {
-            logger.LogWarning($"مكتبة wkhtmltopdf غير موجودة في المسار المتوقع. تم تعطيل تحويل PDF.");
-            // تسجيل DummyPdfConverter كخدمة منفصلة
-            builder.Services.AddSingleton<DummyPdfConverter>();
-        }
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "حدث خطأ أثناء تهيئة DinkToPdf. تم تعطيل تحويل PDF.");
-        // تسجيل DummyPdfConverter كخدمة منفصلة
-        builder.Services.AddSingleton<DummyPdfConverter>();
-    }
-    
+    // تسجيل خدمة PDF الجديدة
+    logger.LogInformation("تسجيل خدمة SelectPdf للتوافق مع Azure");
+    builder.Services.AddSingleton<IPdfService, SelectPdfService>();
+
+    // تسجيل DummyPdfConverter كخدمة احتياطية للتوافق مع الكود القديم
+    builder.Services.AddSingleton<DummyPdfConverter>();
+
     // تسجيل خدمة معالجة الدفع
     builder.Services.AddScoped<IPaymentService, PaymentService>();
 
@@ -125,7 +84,7 @@ try
                     maxRetryCount: 5,
                     maxRetryDelay: TimeSpan.FromSeconds(30),
                     errorNumbersToAdd: null);
-                
+
                 sqlOptions.CommandTimeout(30);
             });
         }
@@ -157,16 +116,16 @@ try
     // Configure CORS
     builder.Services.AddCors(options =>
     {
-        options.AddPolicy("AllowReactApp", 
+        options.AddPolicy("AllowReactApp",
             builder =>
             {
                 builder
                     .WithOrigins(
                         "https://shuttercart.netlify.app",
-                        "http://localhost:5173",  
+                        "http://localhost:5173",
                       "http://localhost:5000",
                     "http://localhost:3000",
-                    "https://localhost:5000",                     
+                    "https://localhost:5000",
                   "https://reactonlinestore-eebshvegccajfmfh.eastasia-01.azurewebsites.net",
                         "https://reactbackend-production.up.railway.app"
                     )
@@ -224,7 +183,7 @@ try
     var app = builder.Build();
 
     // إضافة نقطة نهاية اختبار مباشرة (بدون وحدة تحكم)
-    app.MapGet("/api/test", () => 
+    app.MapGet("/api/test", () =>
     {
         logger.LogInformation("تم الوصول إلى نقطة نهاية الاختبار");
         return Results.Ok(new { message = "API is working!", timestamp = DateTime.UtcNow });
@@ -235,7 +194,7 @@ try
     {
         string wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
         logger.LogInformation($"مسار wwwroot: {wwwrootPath}");
-        
+
         if (!Directory.Exists(wwwrootPath))
         {
             Directory.CreateDirectory(wwwrootPath);
@@ -320,10 +279,10 @@ try
         catch (Exception ex)
         {
             logger.LogError(ex, "خطأ غير معالج: {Path}", context.Request.Path);
-            
+
             context.Response.StatusCode = 500;
             context.Response.ContentType = "application/json";
-            
+
             var exceptionDetails = new
             {
                 error = "An error occurred",
@@ -331,7 +290,7 @@ try
                 path = context.Request.Path,
                 timestamp = DateTime.UtcNow
             };
-            
+
             await context.Response.WriteAsJsonAsync(exceptionDetails);
         }
     });
@@ -348,15 +307,15 @@ try
     {
         var services = scope.ServiceProvider;
         logger.LogInformation("محاولة اختبار الاتصال بقاعدة البيانات");
-        
+
         try
         {
             var context = services.GetRequiredService<ApplicationDbContext>();
-            
+
             // اختبار الاتصال بقاعدة البيانات فقط
             var canConnect = await context.Database.CanConnectAsync();
             logger.LogInformation($"يمكن الاتصال بقاعدة البيانات: {canConnect}");
-            
+
             if (canConnect)
             {
                 logger.LogInformation("محاولة تهيئة المستخدمين والأدوار");
