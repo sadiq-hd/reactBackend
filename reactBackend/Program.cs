@@ -11,6 +11,11 @@ using System.Text;
 using DinkToPdf;
 using DinkToPdf.Contracts;
 using System.IO;
+using System.Runtime.Loader;
+using System.Runtime.InteropServices;
+
+// انقل فئة CustomAssemblyLoadContext إلى ملف منفصل في مجلد Services
+// ثم قم باستيرادها من هناك
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -44,9 +49,46 @@ try
     // تسجيل خدمة الصور
     builder.Services.AddScoped<IImageService, ImageService>();
 
-    // تعطيل DinkToPdf تماماً
-    // وبدلاً من ذلك، استخدم استراتيجية أخرى مثل تعديل الوحدات التي تستخدمها
-    // أو تعديل الكود ليعمل بدون تحويل PDF
+    try
+    {
+        // استخدام CustomAssemblyLoadContext من مجلد Services
+        var context = new CustomAssemblyLoadContext();
+        string wkhtmltopdfPath = "";
+        
+        // تحديد مسار المكتبة بناءً على نظام التشغيل
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            wkhtmltopdfPath = Path.Combine(builder.Environment.ContentRootPath, "libwkhtmltox.dll");
+        } 
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            wkhtmltopdfPath = Path.Combine(builder.Environment.ContentRootPath, "libwkhtmltox.so");
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            wkhtmltopdfPath = Path.Combine(builder.Environment.ContentRootPath, "libwkhtmltox.dylib");
+        }
+        
+        // التحقق من وجود المكتبة
+        if (!string.IsNullOrEmpty(wkhtmltopdfPath) && File.Exists(wkhtmltopdfPath))
+        {
+            context.LoadUnmanagedLibrary(wkhtmltopdfPath);
+            builder.Services.AddSingleton(typeof(IConverter), new SynchronizedConverter(new PdfTools()));
+            logger.LogInformation($"تم تسجيل DinkToPdf بنجاح من المسار: {wkhtmltopdfPath}");
+        }
+        else
+        {
+            logger.LogWarning($"مكتبة wkhtmltopdf غير موجودة في المسار المتوقع. تم تعطيل تحويل PDF.");
+            // تسجيل DummyPdfConverter كخدمة منفصلة
+            builder.Services.AddSingleton<DummyPdfConverter>();
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "حدث خطأ أثناء تهيئة DinkToPdf. تم تعطيل تحويل PDF.");
+        // تسجيل DummyPdfConverter كخدمة منفصلة
+        builder.Services.AddSingleton<DummyPdfConverter>();
+    }
     
     // تسجيل خدمة معالجة الدفع
     builder.Services.AddScoped<IPaymentService, PaymentService>();
@@ -230,40 +272,40 @@ try
     });
 
     // إضافة دعم الملفات الثابتة بمعالجة أخطاء أفضل
-  try
-{
-    app.UseStaticFiles();
-
-    // تكوين مجلد الصور مع إضافة رؤوس CORS
-    app.UseStaticFiles(new StaticFileOptions
+    try
     {
-        FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "wwwroot", "images")),
-        RequestPath = "/images",
-        OnPrepareResponse = ctx =>
-        {
-            // إضافة رؤوس CORS للسماح بالوصول من أي مصدر
-            ctx.Context.Response.Headers.Append("Access-Control-Allow-Origin", "*");
-            // إضافة التخزين المؤقت لتحسين الأداء
-            ctx.Context.Response.Headers.Append("Cache-Control", "public,max-age=86400");
-        }
-    });
+        app.UseStaticFiles();
 
-    // تكوين مجلد الفواتير مع إضافة رؤوس CORS أيضًا
-    app.UseStaticFiles(new StaticFileOptions
-    {
-        FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "wwwroot", "invoices")),
-        RequestPath = "/invoices",
-        OnPrepareResponse = ctx =>
+        // تكوين مجلد الصور مع إضافة رؤوس CORS
+        app.UseStaticFiles(new StaticFileOptions
         {
-            ctx.Context.Response.Headers.Append("Access-Control-Allow-Origin", "*");
-            ctx.Context.Response.Headers.Append("Cache-Control", "public,max-age=86400");
-        }
-    });
-}
-catch (Exception ex)
-{
-    logger.LogWarning(ex, "حدث خطأ أثناء تكوين الملفات الثابتة ولكن سيستمر التطبيق");
-}
+            FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "wwwroot", "images")),
+            RequestPath = "/images",
+            OnPrepareResponse = ctx =>
+            {
+                // إضافة رؤوس CORS للسماح بالوصول من أي مصدر
+                ctx.Context.Response.Headers.Append("Access-Control-Allow-Origin", "*");
+                // إضافة التخزين المؤقت لتحسين الأداء
+                ctx.Context.Response.Headers.Append("Cache-Control", "public,max-age=86400");
+            }
+        });
+
+        // تكوين مجلد الفواتير مع إضافة رؤوس CORS أيضًا
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "wwwroot", "invoices")),
+            RequestPath = "/invoices",
+            OnPrepareResponse = ctx =>
+            {
+                ctx.Context.Response.Headers.Append("Access-Control-Allow-Origin", "*");
+                ctx.Context.Response.Headers.Append("Cache-Control", "public,max-age=86400");
+            }
+        });
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "حدث خطأ أثناء تكوين الملفات الثابتة ولكن سيستمر التطبيق");
+    }
 
     // Basic health check endpoint
     app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestamp = DateTime.UtcNow }));

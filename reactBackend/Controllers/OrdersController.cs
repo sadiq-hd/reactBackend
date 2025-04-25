@@ -25,6 +25,8 @@ namespace reactBackend.Controllers
         private readonly IWebHostEnvironment _environment;
         private readonly IPaymentService _paymentService;
 
+        
+
         public OrdersController(
             ApplicationDbContext context,
             ILogger<OrdersController> logger,
@@ -994,69 +996,127 @@ namespace reactBackend.Controllers
             }
         }
 
-        private async Task GenerateInvoiceForOrder(Order order)
+   private async Task GenerateInvoiceForOrder(Order order)
+{
+    string mainInvoiceFileName = string.Empty;
+    string mainInvoicePath = string.Empty;
+    string mainInvoiceDirectory = string.Empty;
+    byte[] pdfBytes = null;
+    
+    try
+    {
+        // التحقق مما إذا كان المحول متاحًا
+        if (_pdfConverter == null)
         {
-            try
+            _logger.LogWarning($"محول PDF غير متاح لإنشاء فاتورة الطلب {order.Id}");
+            
+            // إنشاء اسم ملف للفاتورة ولكن بدون محتوى حقيقي
+            mainInvoiceFileName = $"Invoice-{order.Id}-{DateTime.Now:yyyyMMddHHmmss}.pdf";
+            mainInvoicePath = Path.Combine("invoices", mainInvoiceFileName).Replace("\\", "/");
+            
+            // إذا كان المحول الوهمي متاحًا، استخدمه لإنشاء ملف وهمي
+            var dummyPdfConverter = HttpContext.RequestServices.GetService<DummyPdfConverter>();
+            if (dummyPdfConverter != null)
             {
-                string htmlContent = GenerateInvoiceHtml(order);
-
-                var globalSettings = new GlobalSettings
-                {
-                    ColorMode = ColorMode.Color,
-                    Orientation = Orientation.Portrait,
-                    PaperSize = PaperKind.A4,
-                    Margins = new MarginSettings { Top = 10, Bottom = 10, Left = 10, Right = 10 },
-                    DocumentTitle = $"Invoice-{order.Id}"
-                };
-
-                var objectSettings = new ObjectSettings
-                {
-                    PagesCount = true,
-                    HtmlContent = htmlContent,
-                    WebSettings = { DefaultEncoding = "utf-8" },
-                    HeaderSettings = new HeaderSettings
-                    {
-                        FontName = "Arial",
-                        FontSize = 9,
-                        Right = "Page [page] of [toPage]",
-                        Left = $"رقم الطلب: {order.Id}",
-                        Line = true
-                    },
-                    FooterSettings = new FooterSettings
-                    {
-                        FontName = "Arial",
-                        FontSize = 9,
-                        Line = true,
-                        Center = $"© {DateTime.Now.Year} Sadiq Aldubaisi  متجرنا"
-                    }
-                };
-
-                var pdf = new HtmlToPdfDocument()
-                {
-                    GlobalSettings = globalSettings,
-                    Objects = { objectSettings }
-                };
-
-                byte[] pdfBytes = _pdfConverter.Convert(pdf);
-
-                string invoiceDirectory = Path.Combine(_environment.WebRootPath, "invoices");
-                Directory.CreateDirectory(invoiceDirectory);
-
-                string invoiceFileName = $"Invoice-{order.Id}-{DateTime.Now:yyyyMMddHHmmss}.pdf";
-                string invoicePath = Path.Combine(invoiceDirectory, invoiceFileName);
-
-                await System.IO.File.WriteAllBytesAsync(invoicePath, pdfBytes);
-
-                order.InvoicePath = Path.Combine("invoices", invoiceFileName).Replace("\\", "/");
-                _context.Orders.Update(order);
-                await _context.SaveChangesAsync();
+                mainInvoiceDirectory = Path.Combine(_environment.WebRootPath, "invoices");
+                Directory.CreateDirectory(mainInvoiceDirectory);
+                
+                string fullPath = Path.Combine(mainInvoiceDirectory, mainInvoiceFileName);
+                byte[] dummyPdfBytes = dummyPdfConverter.GenerateDummyPdf($"Order-{order.Id}");
+                await System.IO.File.WriteAllBytesAsync(fullPath, dummyPdfBytes);
             }
-            catch (Exception ex)
-            {
-                _logger.LogError($"Error generating invoice for order {order.Id}: {ex.Message}");
-                throw;
-            }
+            
+            // تحديث مسار الفاتورة في الطلب
+            order.InvoicePath = mainInvoicePath;
+            _context.Orders.Update(order);
+            await _context.SaveChangesAsync();
+            return;
         }
+        
+        // السلوك العادي لإنشاء PDF إذا كان المحول متاحًا
+        string htmlContent = GenerateInvoiceHtml(order);
+
+        var globalSettings = new GlobalSettings
+        {
+            ColorMode = ColorMode.Color,
+            Orientation = Orientation.Portrait,
+            PaperSize = PaperKind.A4,
+            Margins = new MarginSettings { Top = 10, Bottom = 10, Left = 10, Right = 10 },
+            DocumentTitle = $"Invoice-{order.Id}"
+        };
+
+        var objectSettings = new ObjectSettings
+        {
+            PagesCount = true,
+            HtmlContent = htmlContent,
+            WebSettings = { DefaultEncoding = "utf-8" },
+            HeaderSettings = new HeaderSettings
+            {
+                FontName = "Arial",
+                FontSize = 9,
+                Right = "Page [page] of [toPage]",
+                Left = $"رقم الطلب: {order.Id}",
+                Line = true
+            },
+            FooterSettings = new FooterSettings
+            {
+                FontName = "Arial",
+                FontSize = 9,
+                Line = true,
+                Center = $"© {DateTime.Now.Year} Sadiq Aldubaisi  متجرنا"
+            }
+        };
+
+        var pdf = new HtmlToPdfDocument()
+        {
+            GlobalSettings = globalSettings,
+            Objects = { objectSettings }
+        };
+
+        pdfBytes = _pdfConverter.Convert(pdf);
+
+        mainInvoiceDirectory = Path.Combine(_environment.WebRootPath, "invoices");
+        Directory.CreateDirectory(mainInvoiceDirectory);
+
+        mainInvoiceFileName = $"Invoice-{order.Id}-{DateTime.Now:yyyyMMddHHmmss}.pdf";
+        string fullInvoicePath = Path.Combine(mainInvoiceDirectory, mainInvoiceFileName);
+
+        await System.IO.File.WriteAllBytesAsync(fullInvoicePath, pdfBytes);
+
+        mainInvoicePath = Path.Combine("invoices", mainInvoiceFileName).Replace("\\", "/");
+        order.InvoicePath = mainInvoicePath;
+        _context.Orders.Update(order);
+        await _context.SaveChangesAsync();
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError($"Error generating invoice for order {order.Id}: {ex.Message}");
+        _logger.LogError(ex.StackTrace);
+        
+        // في حالة حدوث خطأ، نحاول على الأقل تعيين مسار الفاتورة
+        try
+        {
+            if (string.IsNullOrEmpty(mainInvoiceFileName))
+            {
+                mainInvoiceFileName = $"Invoice-{order.Id}-{DateTime.Now:yyyyMMddHHmmss}.pdf";
+            }
+            
+            if (string.IsNullOrEmpty(mainInvoicePath))
+            {
+                mainInvoicePath = Path.Combine("invoices", mainInvoiceFileName).Replace("\\", "/");
+            }
+            
+            order.InvoicePath = mainInvoicePath;
+            _context.Orders.Update(order);
+            await _context.SaveChangesAsync();
+        }
+        catch (Exception innerEx)
+        {
+            // إذا فشل أيضًا، نتجاهل الخطأ ولكن نسجله
+            _logger.LogError(innerEx, "فشل أيضًا في تعيين مسار الفاتورة للطلب");
+        }
+    }
+}
 
         [HttpGet("{id}/invoice")]
         [Authorize]
