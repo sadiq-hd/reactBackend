@@ -208,56 +208,58 @@ namespace reactBackend.Controllers
             await _userManager.AddToRoleAsync(user, "user");
 
             // إرسال رمز OTP للتحقق من رقم الهاتف
-            // var otp = _otpService.GenerateOtp();
-            // if (!string.IsNullOrEmpty(user.PhoneNumber))
-            // {
-            //     _otpService.StoreOtp(user.PhoneNumber, otp);
-            // }
-            // else
-            // {
-            //     return BadRequest("رقم الهاتف غير متوفر للمستخدم");
-            // }
+            var otp = _otpService.GenerateOtp();
+            if (!string.IsNullOrEmpty(user.PhoneNumber))
+            {
+                _otpService.StoreOtp(user.PhoneNumber, otp);
+            }
+            else
+            {
+                return BadRequest("رقم الهاتف غير متوفر للمستخدم");
+            }
 
-            // // في بيئة الإنتاج سيتم إرسال الرمز عبر SMS
-            // var isDevelopment = _configuration["ASPNETCORE_ENVIRONMENT"] == "Development";
+            // في بيئة الإنتاج سيتم إرسال الرمز عبر SMS
+            var isDevelopment = _configuration["ASPNETCORE_ENVIRONMENT"] == "Development";
 
-            // if (isDevelopment)
-            // {
-            //     return Ok(new
-            //     {
-            //         message = "تم إنشاء الحساب بنجاح. الرجاء التحقق من رقم هاتفك",
-            //         requirePhoneVerification = true,
-            //         phoneNumber = user.PhoneNumber,
-            //         testOtp = otp  // في بيئة الإنتاج يجب إزالة هذا
-            //     });
-            // }
-            // else
-            // {
-            //     return Ok(new
-            //     {
-            //         message = "تم إنشاء الحساب بنجاح. الرجاء التحقق من رقم هاتفك",
-            //         requirePhoneVerification = true,
-            //         phoneNumber = user.PhoneNumber
-            //     });
-            // }
-              var otp = _otpService.GenerateOtp();
-    if (!string.IsNullOrEmpty(user.PhoneNumber))
-    {
-        _otpService.StoreOtp(user.PhoneNumber, otp);
-    }
-    else
-    {
-        return BadRequest("رقم الهاتف غير متوفر للمستخدم");
-    }
+            if (isDevelopment)
+            {
+                return Ok(new
+                {
+                    message = "تم إنشاء الحساب بنجاح. الرجاء التحقق من رقم هاتفك",
+                    requirePhoneVerification = true,
+                    phoneNumber = user.PhoneNumber,
+                    testOtp = otp  // في بيئة الإنتاج يجب إزالة هذا
+                });
+            }
+            else
+            {
+                return Ok(new
+                {
+                    message = "تم إنشاء الحساب بنجاح. الرجاء التحقق من رقم هاتفك",
+                    requirePhoneVerification = true,
+                    phoneNumber = user.PhoneNumber,
+                     testOtp = otp  // في بيئة الإنتاج يجب إزالة هذا
 
-    // إرجاع الرمز دائماً بغض النظر عن البيئة
-    return Ok(new
-    {
-        message = "تم إنشاء الحساب بنجاح. الرجاء التحقق من رقم هاتفك",
-        requirePhoneVerification = true,
-        phoneNumber = user.PhoneNumber,
-        otp = otp  // إضافة الرمز للاستجابة
-    });
+                });
+            }
+    //           var otp = _otpService.GenerateOtp();
+    // if (!string.IsNullOrEmpty(user.PhoneNumber))
+    // {
+    //     _otpService.StoreOtp(user.PhoneNumber, otp);
+    // }
+    // else
+    // {
+    //     return BadRequest("رقم الهاتف غير متوفر للمستخدم");
+    // }
+
+    // // إرجاع الرمز دائماً بغض النظر عن البيئة
+    // return Ok(new
+    // {
+    //     message = "تم إنشاء الحساب بنجاح. الرجاء التحقق من رقم هاتفك",
+    //     requirePhoneVerification = true,
+    //     phoneNumber = user.PhoneNumber,
+    //     otp = otp  // إضافة الرمز للاستجابة
+    // });
 
         }
 
@@ -334,7 +336,7 @@ namespace reactBackend.Controllers
                 return Ok(new
                 {
                     message = "تم إرسال رمز جديد إلى هاتفك المحمول",
-                     testOtp = otp 
+                    testOtp = otp 
                 });
             }
         }
